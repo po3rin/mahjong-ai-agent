@@ -18,7 +18,8 @@ def generate_command(args):
     """問題生成コマンド"""
     generator = QuestionGenerator(
         model=args.model,
-        load_from=args.load_optimized if hasattr(args, 'load_optimized') else None
+        load_from=args.load_optimized if hasattr(args, 'load_optimized') else None,
+        enable_langfuse=args.langfuse if hasattr(args, 'langfuse') else False
     )
     questions = generator.generate_question(
         difficulty=args.difficulty, num_questions=args.num
@@ -26,25 +27,34 @@ def generate_command(args):
 
     # 検証器の初期化（デフォルトで検証を実行）
     validator = QuestionValidator()
-    validation_results = []
     print("\n生成した問題を自動検証します...\n")
 
-    for i, q in enumerate(questions, 1):
+    # 並列バリデーションの実行
+    hand_jsons = [q.hand_json for q in questions]
+    expected_scores = [q.expected_score for q in questions]
+    validation_details = validator.validate_batch(hand_jsons, expected_scores)
+
+    # 結果を表示
+    validation_results = []
+    for i, (q, details) in enumerate(zip(questions, validation_details), 1):
         print(f"\n{'='*60}")
         print(f"問題 {i}:")
         print(f"{'='*60}")
         print(f"{q.question}\n")
 
-        if args.verbose:
-            print(f"Hand JSON:")
-            print(json.dumps(json.loads(q.hand_json), indent=2, ensure_ascii=False))
-            print(f"\nLLMが考えた答え: {q.expected_score}")
+        # Hand JSONの内容をそのまま表示
+        print("Hand JSON:")
+        print(json.dumps(json.loads(q.hand_json), indent=2, ensure_ascii=False))
+        print()
 
-        # 自動検証
-        details = validator.validate_with_details(q.hand_json, q.expected_score)
+        if args.verbose:
+            print(f"LLMが考えた答え: {q.expected_score}\n")
+
+        # 検証結果を表示
         result = details.get('is_valid', 0)
         validation_status = "✓ 正しい" if result == 1 else "✗ 間違っている"
-        print(f"\n検証結果: {validation_status} (スコア: {result})")
+        print(f"検証結果: {validation_status} (スコア: {result})")
+        print()
 
         validation_results.append({
             "question_number": i,
@@ -55,21 +65,37 @@ def generate_command(args):
 
         # エラーメッセージがあれば表示
         if details.get('error'):
-            print(f"\nエラー: {details['error']}")
+            print(f"エラー: {details['error']}")
+            print()
 
         # 詳細な検証結果を表示
         if args.verbose or result != 1:
-            if result != 1:
-                print("\n詳細情報:")
+            # エラーでない場合、または詳細情報がある場合のみ表示
+            has_details = (details.get('score') is not None or
+                          details.get('expected_score') is not None or
+                          details.get('han') is not None or
+                          details.get('fu') is not None or
+                          details.get('yaku'))
+
+            if has_details:
+                if result != 1:
+                    print("詳細情報:")
                 if details.get('score') is not None:
-                    print(f"  実際の点数: {details.get('score', 'N/A')}")
-                print(f"  期待される点数: {details.get('expected_score', 'N/A')}")
+                    print(f"  計算された点数: {details.get('score')}")
+                if details.get('expected_score') is not None:
+                    print(f"  期待される点数: {details.get('expected_score')}")
+                    if details.get('score') is not None:
+                        if details.get('score') == details.get('expected_score'):
+                            print("  → 点数が一致しています！")
+                        else:
+                            print(f"  → 点数が一致しません (差分: {details.get('score') - details.get('expected_score')})")
                 if details.get('han') is not None:
-                    print(f"  翻数: {details.get('han', 'N/A')}")
+                    print(f"  翻数: {details.get('han')}")
                 if details.get('fu') is not None:
-                    print(f"  符: {details.get('fu', 'N/A')}")
+                    print(f"  符: {details.get('fu')}")
                 if details.get('yaku'):
                     print(f"  役: {', '.join(details.get('yaku', []))}")
+                print()
 
     # ファイルに保存
     output_data = {
@@ -130,16 +156,105 @@ def validate_command(args):
 
     # JSONファイルから読み込むか、直接指定
     if args.file:
-        with open(args.file, "r") as f:
-            hand_json = f.read()
-    else:
-        hand_json = args.hand_json
+        with open(args.file, "r", encoding="utf-8") as f:
+            file_data = json.load(f)
 
-    # 常に詳細情報を表示
-    details = validator.validate_with_details(hand_json, args.expected_score)
+        # ファイルが複数の問題を含むかチェック
+        if "questions" in file_data:
+            # 複数の問題を含むファイル（generate コマンドで生成されたファイル）
+            questions = file_data["questions"]
+            hand_jsons = []
+            expected_scores = []
+
+            for q in questions:
+                hand_jsons.append(q["hand_json"])
+                expected_scores.append(q.get("expected_score"))
+
+            # バッチ検証を実行
+            validation_details = validator.validate_batch(hand_jsons, expected_scores)
+
+            # 各問題の検証結果を表示
+            for i, (q, details) in enumerate(zip(questions, validation_details), 1):
+                print(f"\n{'='*60}")
+                print(f"問題 {i}")
+                print(f"{'='*60}")
+
+                if q.get("question"):
+                    print(f"問題文: {q['question']}\n")
+
+                # Hand JSONの内容をそのまま表示
+                print("Hand JSON:")
+                print(json.dumps(json.loads(q["hand_json"]), indent=2, ensure_ascii=False))
+                print()
+
+                # 検証結果を直接表示
+                result = details.get('is_valid', 0)
+                validation_status = "✓ 正しい" if result == 1 else "✗ 間違っている"
+                print(f"検証結果: {validation_status} (スコア: {result})")
+                print()
+
+                # エラーメッセージがあれば表示
+                if details.get('error'):
+                    print(f"エラー: {details['error']}")
+                    print()
+
+                # 詳細情報を表示
+                if details.get('score') is not None:
+                    print(f"計算された点数: {details.get('score')}")
+                if details.get('han') is not None:
+                    print(f"翻数: {details.get('han')}")
+                if details.get('fu') is not None:
+                    print(f"符: {details.get('fu')}")
+                if details.get('yaku'):
+                    print(f"役: {', '.join(details.get('yaku', []))}")
+                if details.get('expected_score') is not None:
+                    print(f"期待される点数: {details.get('expected_score')}")
+                    if details.get('score') is not None:
+                        if details.get('score') == details.get('expected_score'):
+                            print("→ 点数が一致しています！")
+                        else:
+                            print(f"→ 点数が一致しません (差分: {details.get('score') - details.get('expected_score')})")
+                print()
+
+            # 統計情報を表示
+            print(f"\n{'='*60}")
+            print("検証統計")
+            print(f"{'='*60}")
+            total = len(validation_details)
+            correct = sum(1 for d in validation_details if d.get('is_valid') == 1)
+            calculated = sum(1 for d in validation_details if d.get('score') is not None)
+            accuracy = (correct / total * 100) if total > 0 else 0
+            calc_rate = (calculated / total * 100) if total > 0 else 0
+
+            print(f"総問題数: {total}")
+            print(f"点数計算成功: {calculated} ({calc_rate:.1f}%)")
+            print(f"点数一致: {correct}")
+            print(f"点数不一致: {total - correct}")
+            print(f"正答率: {accuracy:.1f}%")
+            print(f"{'='*60}\n")
+        else:
+            # 単一の問題（Hand形式のJSON）
+            hand_json = json.dumps(file_data)
+            details = validator.validate_with_details(hand_json, args.expected_score)
+            _print_validation_details(details)
+    else:
+        # 直接JSON文字列を指定
+        hand_json = args.hand_json
+        details = validator.validate_with_details(hand_json, args.expected_score)
+        _print_validation_details(details)
+
+
+def _print_validation_details(details):
+    """検証結果の詳細を表示するヘルパー関数"""
     result = details.get('is_valid', 0)
 
-    print(f"検証結果: {'✓ 正しい' if result == 1 else '✗ 間違っている'} (スコア: {result})")
+    print(f"\n{'='*60}")
+    print("検証結果")
+    print(f"{'='*60}")
+
+    # 検証結果の表示
+    validation_status = "✓ 正しい" if result == 1 else "✗ 間違っている"
+    print(f"ステータス: {validation_status} (スコア: {result})")
     print()
 
     # エラーメッセージがあれば表示
@@ -147,13 +262,20 @@ def validate_command(args):
         print(f"エラー: {details['error']}")
     else:
         # 正常な場合は詳細情報を表示
-        print(f"点数: {details.get('score', 'N/A')}")
-        print(f"翻: {details.get('han', 'N/A')}")
+        print(f"計算された点数: {details.get('score', 'N/A')}")
+        print(f"翻数: {details.get('han', 'N/A')}")
         print(f"符: {details.get('fu', 'N/A')}")
         if details.get('yaku'):
             print(f"役: {', '.join(details.get('yaku', []))}")
         if details.get('expected_score') is not None:
-            print(f"期待点数: {details.get('expected_score')}")
+            print(f"期待される点数: {details.get('expected_score')}")
+            if details.get('score') is not None:
+                if details.get('score') == details.get('expected_score'):
+                    print("→ 点数が一致しています！")
+                else:
+                    print(f"→ 点数が一致しません (差分: {details.get('score') - details.get('expected_score')})")
+
+    print(f"{'='*60}\n")
 
 
 def optimize_command(args):
@@ -229,6 +351,9 @@ def main():
     )
     generate_parser.add_argument(
         "--load-optimized", help="最適化されたプロンプトのパス（optimize コマンドで保存したファイル）"
+    )
+    generate_parser.add_argument(
+        "--langfuse", action="store_true", help="Langfuseトレーシングを有効化"
     )
     generate_parser.set_defaults(func=generate_command)
 

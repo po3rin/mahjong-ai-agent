@@ -1,5 +1,6 @@
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from tools.calculator import calculate_score, validate_hand
@@ -11,6 +12,13 @@ logger = logging.getLogger(__name__)
 
 class QuestionValidator:
     """麻雀の問題と回答が正しいかをチェックするクラス"""
+
+    def __init__(self, max_workers: int = 16):
+        """
+        Args:
+            max_workers: 並列実行時の最大ワーカー数
+        """
+        self.max_workers = max_workers
 
     def validate_question(
         self, hand_json: str, expected_score: Optional[int] = None
@@ -140,6 +148,55 @@ class QuestionValidator:
                 "is_valid": 0,
                 "error": f"Unexpected error: {str(e)}",
             }
+
+    def validate_batch(
+        self, hand_jsons: list[str], expected_scores: Optional[list[Optional[int]]] = None
+    ) -> list[dict]:
+        """
+        複数の麻雀問題を並列でバリデーションする
+
+        Args:
+            hand_jsons: Hand形式のJSON文字列のリスト
+            expected_scores: 期待される点数のリスト（オプション）
+
+        Returns:
+            list[dict]: 検証結果の詳細のリスト
+        """
+        if expected_scores is None:
+            expected_scores = [None] * len(hand_jsons)
+
+        if len(hand_jsons) != len(expected_scores):
+            raise ValueError("hand_jsons and expected_scores must have the same length")
+
+        # 1つのみの場合は並列化不要
+        if len(hand_jsons) == 1:
+            return [self.validate_with_details(hand_jsons[0], expected_scores[0])]
+
+        logger.info(f"Validating {len(hand_jsons)} questions in parallel...")
+
+        results = [None] * len(hand_jsons)  # 順序を保持するための結果配列
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # タスクをサブミット（インデックスも一緒に保存）
+            future_to_index = {
+                executor.submit(self.validate_with_details, hand_json, expected_score): i
+                for i, (hand_json, expected_score) in enumerate(zip(hand_jsons, expected_scores))
+            }
+
+            # 完了したタスクから結果を収集
+            for future in as_completed(future_to_index):
+                index = future_to_index[future]
+                try:
+                    results[index] = future.result()
+                except Exception as e:
+                    logger.error(f"Error validating question at index {index}: {str(e)}", exc_info=True)
+                    results[index] = {
+                        "is_valid": 0,
+                        "error": f"Validation failed: {str(e)}",
+                    }
+
+        logger.info(f"Validated {len(hand_jsons)} questions in parallel")
+        return results
 
 
 if __name__ == "__main__":

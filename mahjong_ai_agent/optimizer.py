@@ -37,20 +37,34 @@ class QuestionMetric:
             float: 評価スコア (0.0 or 1.0)
         """
         try:
+            # 入力引数をログに記録
+            logger.info("=== Metric Evaluation ===")
+            logger.info(f"Input hand_json: {prediction.hand_json}")
+            if hasattr(prediction, 'expected_score'):
+                logger.info(f"Expected score: {prediction.expected_score}")
+            if hasattr(prediction, 'question'):
+                logger.info(f"Question: {prediction.question}")
+
             # 問題の検証（expected_scoreは検証に使用しない）
             validation_result = self.validator.validate_with_details(
                 prediction.hand_json,
                 expected_score=None,  # 期待点数との一致は評価しない
             )
 
+            # 検証結果をログに記録
+            logger.info(f"Validation result: {validation_result}")
+
             # エラーがない場合は1.0点、それ以外は0.0点
             if "error" not in validation_result:
+                logger.info("✓ Validation passed - Score: 1.0")
                 return 1.0
             else:
+                logger.warning(f"✗ Validation failed - Error: {validation_result.get('error')} - Score: 0.0")
                 return 0.0
 
         except Exception as e:
             logger.error(f"Error evaluating question: {str(e)}", exc_info=True)
+            logger.error(f"Failed prediction: {prediction}")
             return 0.0
 
 
@@ -73,9 +87,9 @@ class QuestionOptimizer:
                 "OpenAI API key is required. Set OPENAI_API_KEY environment variable or pass api_key parameter."
             )
 
-        # DSPyのLMを設定
+        # DSPyのLMを設定（並列化対応）
         lm = dspy.LM(model=f"openai/{model}", api_key=self.api_key)
-        dspy.configure(lm=lm)
+        dspy.configure(lm=lm, async_max_workers=16)
 
         self.generator = MahjongQuestionModule()
         self.metric = QuestionMetric()
