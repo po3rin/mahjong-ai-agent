@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from typing import Optional
@@ -15,10 +16,10 @@ load_dotenv()
 
 
 class QuestionMetric:
-    """問題の評価メトリック"""
+    """問題の評価メトリック（BAML統合版）"""
 
-    def __init__(self):
-        self.validator = QuestionValidator()
+    def __init__(self, use_baml: bool = True):
+        self.validator = QuestionValidator(use_baml=use_baml)
 
     def __call__(self, example, prediction, trace=None) -> float:
         """
@@ -46,9 +47,12 @@ class QuestionMetric:
                 logger.info(f"Question: {prediction.question}")
 
             # 問題の検証（expected_scoreは検証に使用しない）
-            validation_result = self.validator.validate_with_details(
-                prediction.hand_json,
-                expected_score=None,  # 期待点数との一致は評価しない
+            # 非同期関数を同期的に実行
+            validation_result = asyncio.run(
+                self.validator.validate_with_details(
+                    prediction.hand_json,
+                    expected_score=None,  # 期待点数との一致は評価しない
+                )
             )
 
             # 検証結果をログに記録
@@ -89,7 +93,7 @@ class QuestionOptimizer:
 
         # DSPyのLMを設定（並列化対応）
         lm = dspy.LM(model=f"openai/{model}", api_key=self.api_key)
-        dspy.configure(lm=lm, async_max_workers=16)
+        dspy.configure(lm=lm, async_max_workers=8)
 
         self.generator = MahjongQuestionModule()
         self.metric = QuestionMetric()

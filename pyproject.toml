@@ -11,4 +11,5 @@ dependencies = [
     "mahjong>=1.2.0",
     "dspy-ai>=2.0.0",
     "langfuse>=2.0.0",
+    "baml-py>=0.211.2",
 ]

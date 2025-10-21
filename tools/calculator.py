@@ -236,11 +236,15 @@ def validate_meld(tiles: List[str], melds: List[MeldInfo]) -> bool:
         logger.error(f"Invalid meld format: {str(e)}")
         return False
 
-    # meldsに存在する牌は全てtilesに含まれているべき
+    # meldsに存在する牌は全てtilesに含まれているべき（枚数も正しくカウント）
+    from collections import Counter
+    tiles_counter = Counter(tiles)
+
     for meld in melds:
-        for tile in meld.tiles:
-            if tile not in tiles:
-                logger.error(f"Invalid meld in hand: {meld.tiles}")
+        meld_counter = Counter(meld.tiles)
+        for tile, count in meld_counter.items():
+            if tiles_counter.get(tile, 0) < count:
+                logger.error(f"Invalid meld in hand. melds is not valid: {meld.tiles} - tile '{tile}' appears {count} times in meld but only {tiles_counter.get(tile, 0)} times in hand")
                 return False
     return True
 

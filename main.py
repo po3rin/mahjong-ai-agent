@@ -14,25 +14,45 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def generate_command(args):
-    """問題生成コマンド"""
+async def generate_command_async(args):
+    """問題生成コマンド（非同期版）"""
     generator = QuestionGenerator(
         model=args.model,
         load_from=args.load_optimized if hasattr(args, 'load_optimized') else None,
         enable_langfuse=args.langfuse if hasattr(args, 'langfuse') else False
     )
-    questions = generator.generate_question(
+    questions = await generator.generate_question(
         difficulty=args.difficulty, num_questions=args.num
     )
 
-    # 検証器の初期化（デフォルトで検証を実行）
-    validator = QuestionValidator()
+    # 検証器の初期化（BAML統合版）
+    validator = QuestionValidator(use_baml=True)
     print("\n生成した問題を自動検証します...\n")
 
-    # 並列バリデーションの実行
-    hand_jsons = [q.hand_json for q in questions]
-    expected_scores = [q.expected_score for q in questions]
-    validation_details = validator.validate_batch(hand_jsons, expected_scores)
+    # 並列バリデーションの実行（非同期）
+    # HandオブジェクトをJSON文字列に変換（Noneの場合はスキップ）
+    validation_details = []
+    for q in questions:
+        if q.hand:
+            hand_json = q.hand.model_dump_json()
+            details = (await validator.validate_batch([hand_json], [None]))[0]
+        else:
+            # Hand抽出に失敗した場合
+            details = {'is_valid': 0, 'error': 'Hand extraction failed', 'score': None}
+        validation_details.append(details)
+
+    # 計算された点数をexpected_scoreとして設定
+    for q, details in zip(questions, validation_details):
+        if details.get('score') is not None:
+            q.expected_score = details['score']
+
+    return questions, validation_details
+
+
+def generate_command(args):
+    """問題生成コマンド"""
+    import asyncio
+    questions, validation_details = asyncio.run(generate_command_async(args))
 
     # 結果を表示
     validation_results = []
@@ -42,13 +62,14 @@ def generate_command(args):
         print(f"{'='*60}")
         print(f"{q.question}\n")
 
-        # Hand JSONの内容をそのまま表示
-        print("Hand JSON:")
-        print(json.dumps(json.loads(q.hand_json), indent=2, ensure_ascii=False))
-        print()
+        # 抽出されたHandオブジェクトを表示
+        if q.hand:
+            print("抽出された手牌情報:")
+            print(json.dumps(json.loads(q.hand.model_dump_json()), indent=2, ensure_ascii=False))
+            print()
 
-        if args.verbose:
-            print(f"LLMが考えた答え: {q.expected_score}\n")
+        if args.verbose and q.expected_score:
+            print(f"計算された点数: {q.expected_score}\n")
 
         # 検証結果を表示
         result = details.get('is_valid', 0)
@@ -104,7 +125,7 @@ def generate_command(args):
         "questions": [
             {
                 "question": q.question,
-                "hand_json": q.hand_json,
+                "hand_json": q.hand.model_dump_json() if q.hand else "{}",
                 "expected_score": q.expected_score,
             }
             for q in questions
@@ -150,9 +171,9 @@ def generate_command(args):
     print(f"{'='*60}")
 
 
-def validate_command(args):
-    """検証コマンド"""
-    validator = QuestionValidator()
+async def validate_command_async(args):
+    """検証コマンド（非同期版）"""
+    validator = QuestionValidator(use_baml=True)
 
     # JSONファイルから読み込むか、直接指定
     if args.file:
@@ -170,8 +191,8 @@ def validate_command(args):
                 hand_jsons.append(q["hand_json"])
                 expected_scores.append(q.get("expected_score"))
 
-            # バッチ検証を実行
-            validation_details = validator.validate_batch(hand_jsons, expected_scores)
+            # バッチ検証を実行（非同期）
+            validation_details = await validator.validate_batch(hand_jsons, expected_scores)
 
             # 各問題の検証結果を表示
             for i, (q, details) in enumerate(zip(questions, validation_details), 1):
@@ -235,13 +256,19 @@ def validate_command(args):
         else:
             # 単一の問題（Hand形式のJSON）
             hand_json = json.dumps(file_data)
-            details = validator.validate_with_details(hand_json, args.expected_score)
+            details = await validator.validate_with_details(hand_json, args.expected_score)
             _print_validation_details(details)
     else:
         # 直接JSON文字列を指定
         hand_json = args.hand_json
-        details = validator.validate_with_details(hand_json, args.expected_score)
+        details = await validator.validate_with_details(hand_json, args.expected_score)
         _print_validation_details(details)
+
+
+def validate_command(args):
+    """検証コマンド"""
+    import asyncio
+    asyncio.run(validate_command_async(args))
 
 
 def _print_validation_details(details):
