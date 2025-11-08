@@ -7,7 +7,8 @@ from mahjong.hand_calculating.hand_config import HandConfig
 from mahjong.meld import Meld
 from mahjong.tile import TilesConverter
 
-from tools.entity import Hand, MeldInfo, ScoreResponse
+from baml.baml_client.types import Hand, MeldInfo
+from tools.entity import ScoreResponse
 from tools.exceptions import HandValidationError, ScoreCalculationError
 
 logger = logging.getLogger(__name__)

@@ -5,7 +5,7 @@ from typing import Optional
 
 from mahjong_ai_agent.baml_parser import parse_hand_with_baml
 from tools.calculator import calculate_score, validate_hand
-from tools.entity import Hand
+from baml.baml_client.types import Hand
 from tools.exceptions import HandValidationError, ScoreCalculationError
 
 logger = logging.getLogger(__name__)

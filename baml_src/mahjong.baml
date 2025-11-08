@@ -62,16 +62,16 @@ enum WindType {
 
 // 鳴き(メンツ)の情報
 class MeldInfo {
-  tiles string[] @description("鳴いた牌のリスト (例: ['1m', '2m', '3m'])")
+  tiles TileType[] @description("鳴いた牌のリスト (例: ['1m', '2m', '3m'])")
   is_open bool @description("true: 鳴き(ポン/チー/明カン), false: 暗カン")
 }
 
 // 麻雀の手牌情報
 class Hand {
-  tiles string[] @description("手牌の牌リスト。和了牌(win_tile)を含む14枚。鳴いた牌は含めない。形式: '1m', '2p', '3s', '1z'など") @assert(min_tiles, {{ this|length >= 14 }})
+  tiles TileType[] @description("手牌の牌リスト。和了牌(win_tile)を含む14枚。鳴いた牌は含めない。形式: '1m', '2p', '3s', '1z'など") @assert(min_tiles, {{ this|length >= 14 }})
   melds MeldInfo[] | null @description("鳴いた牌のリスト。ポン/チー/カンがある場合に設定。ない場合はnull")
-  win_tile string @description("アガリ牌。tilesにも含まれている必要がある (例: '1m')")
-  dora_indicators string[] | null @description("ドラ表示牌のリスト")
+  win_tile TileType @description("アガリ牌。tilesにも含まれている必要がある (例: '1m')")
+  dora_indicators TileType[] | null @description("ドラ表示牌のリスト")
   // 状況フラグ(デフォルト: false)
   is_riichi bool @description("リーチをかけているか")
   is_tsumo bool @description("ツモアガリか(falseの場合はロン)")
@@ -86,8 +86,8 @@ class Hand {
   is_chiihou bool @description("地和か")
   is_renhou bool @description("人和か")
   is_open_riichi bool @description("オープンリーチか")
-  player_wind string | null @description("自風: 'east'(東家), 'south'(南家), 'west'(西家), 'north'(北家)")
-  round_wind string | null @description("場風: 'east'(東場), 'south'(南場), 'west'(西場), 'north'(北場)")
+  player_wind WindType | null @description("自風: 'east'(東家), 'south'(南家), 'west'(西家), 'north'(北家)")
+  round_wind WindType | null @description("場風: 'east'(東場), 'south'(南場), 'west'(西場), 'north'(北場)")
   paarenchan int @description("本場数")
   kyoutaku_number int @description("供託本数")
   tsumi_number int @description("積み棒の数")
@@ -170,14 +170,14 @@ function ExtractHandFromQuestion(question: string) -> Hand {
 
     和了形のパターン:
     1. 通常の和了形（4面子1雀頭）:
-       例: 手牌「1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m, 1p, 1p, 1p, 1s」で和了牌「1s」
+       例: 手牌「1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m, 1p, 1p, 1p, 1s, 1s」で和了牌「1s」
        → tiles: ["1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "1p", "1p", "1p", "1s", "1s"]
        → win_tile: "1s"
 
     2. 七対子（7組の対子）:
-       例: 手牌「1m, 1m, 2m, 2m, 3m, 3m, 4m, 4m, 5m, 5m, 6m, 6m, 7m」で和了牌「7m」
+       例: 手牌「1m, 1m, 2m, 2m, 3m, 3m, 4m, 4m, 5m, 5m, 6m, 6m, 7m, 7m」で和了牌「2m」
        → tiles: ["1m", "1m", "2m", "2m", "3m", "3m", "4m", "4m", "5m", "5m", "6m", "6m", "7m", "7m"]
-       → win_tile: "7m"
+       → win_tile: "2m"
 
     3. 国士無双（13種の么九牌+1枚）:
        例: 手牌「1m, 9m, 1p, 9p, 1s, 9s, 1z, 2z, 3z, 4z, 5z, 6z, 7z」で和了牌「1m」

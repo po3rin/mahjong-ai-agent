@@ -2,61 +2,15 @@
 import json
 import logging
 import os
-from typing import Optional
 
 from baml.baml_client import b as async_b
 from baml.baml_client.sync_client import b as sync_b
-from baml.baml_client.types import Hand as BAMLHand, MeldInfo as BAMLMeldInfo
-from tools.entity import Hand, MeldInfo
+from baml.baml_client.types import Hand
 
 # BAMLのINFOログを抑制（エラーログのみ表示）
 os.environ.setdefault('BAML_LOG', 'error')
 
 logger = logging.getLogger(__name__)
-
-
-def baml_hand_to_entity_hand(baml_hand: BAMLHand) -> Hand:
-    """
-    BAMLのHand型をtools.entity.Hand型に変換する
-
-    Args:
-        baml_hand: BAMLが生成したHand型
-
-    Returns:
-        Hand: tools/entity.pyのHand型
-    """
-    # MeldInfoの変換
-    melds = None
-    if baml_hand.melds is not None:
-        melds = [
-            MeldInfo(tiles=meld.tiles, is_open=meld.is_open)
-            for meld in baml_hand.melds
-        ]
-
-    return Hand(
-        tiles=baml_hand.tiles,
-        melds=melds,
-        win_tile=baml_hand.win_tile,
-        dora_indicators=baml_hand.dora_indicators,
-        is_riichi=baml_hand.is_riichi,
-        is_tsumo=baml_hand.is_tsumo,
-        is_ippatsu=baml_hand.is_ippatsu,
-        is_rinshan=baml_hand.is_rinshan,
-        is_chankan=baml_hand.is_chankan,
-        is_haitei=baml_hand.is_haitei,
-        is_houtei=baml_hand.is_houtei,
-        is_daburu_riichi=baml_hand.is_daburu_riichi,
-        is_nagashi_mangan=baml_hand.is_nagashi_mangan,
-        is_tenhou=baml_hand.is_tenhou,
-        is_chiihou=baml_hand.is_chiihou,
-        is_renhou=baml_hand.is_renhou,
-        is_open_riichi=baml_hand.is_open_riichi,
-        player_wind=baml_hand.player_wind,
-        round_wind=baml_hand.round_wind,
-        paarenchan=baml_hand.paarenchan,
-        kyoutaku_number=baml_hand.kyoutaku_number,
-        tsumi_number=baml_hand.tsumi_number,
-    )
 
 
 async def parse_hand_with_baml(hand_json: str) -> Hand:
@@ -76,10 +30,7 @@ async def parse_hand_with_baml(hand_json: str) -> Hand:
         logger.info("Parsing hand JSON with BAML...")
 
         # BAMLで構造化パース（非同期版）
-        baml_hand = await async_b.ParseHandFromJSON(hand_json)
-
-        # tools/entity.Hand型に変換
-        hand = baml_hand_to_entity_hand(baml_hand)
+        hand = await async_b.ParseHandFromJSON(hand_json)
 
         logger.info("Successfully parsed hand with BAML")
         return hand
@@ -109,10 +60,7 @@ def parse_hand_with_baml_sync(hand_json: str) -> Hand:
         logger.info("Parsing hand JSON with BAML (sync)...")
 
         # BAMLの同期クライアントを使用
-        baml_hand = sync_b.ParseHandFromJSON(hand_json)
-
-        # tools/entity.Hand型に変換
-        hand = baml_hand_to_entity_hand(baml_hand)
+        hand = sync_b.ParseHandFromJSON(hand_json)
 
         logger.info("Successfully parsed hand with BAML (sync)")
         return hand
@@ -142,10 +90,7 @@ async def extract_hand_from_question(question: str) -> Hand:
         logger.info("Extracting hand from question with BAML...")
 
         # BAMLで問題文から構造化データを抽出（非同期版）
-        baml_hand = await async_b.ExtractHandFromQuestion(question)
-
-        # tools/entity.Hand型に変換
-        hand = baml_hand_to_entity_hand(baml_hand)
+        hand = await async_b.ExtractHandFromQuestion(question)
 
         logger.info("Successfully extracted hand from question with BAML")
         return hand

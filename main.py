@@ -3,9 +3,11 @@ import json
 import logging
 from pathlib import Path
 from datetime import datetime
+import os
+
+from openai import OpenAI
 
 from mahjong_ai_agent.generator import QuestionGenerator
-from mahjong_ai_agent.optimizer import QuestionOptimizer
 from mahjong_ai_agent.validator import QuestionValidator
 
 logging.basicConfig(
@@ -18,12 +20,20 @@ async def generate_command_async(args):
     """問題生成コマンド（非同期版）"""
     generator = QuestionGenerator(
         model=args.model,
-        load_from=args.load_optimized if hasattr(args, 'load_optimized') else None,
         enable_langfuse=args.langfuse if hasattr(args, 'langfuse') else False
     )
-    questions = await generator.generate_question(
-        difficulty=args.difficulty, num_questions=args.num
-    )
+
+    # CSVから生成するか、通常の方法で生成するか
+    if hasattr(args, 'csv') and args.csv:
+        # CSV生成時も--nが指定されていればそれを使う
+        questions = await generator.generate_questions_from_csv(
+            args.csv,
+            num_questions=args.num if args.num > 1 else None
+        )
+    else:
+        questions = await generator.generate_question(
+            difficulty=args.difficulty, num_questions=args.num
+        )
 
     # 検証器の初期化（BAML統合版）
     validator = QuestionValidator(use_baml=True)
@@ -33,7 +43,10 @@ async def generate_command_async(args):
     # HandオブジェクトをJSON文字列に変換（Noneの場合はスキップ）
     validation_details = []
     for q in questions:
-        if q.hand:
+        if q.generation_error:
+            # 問題生成に失敗した場合
+            details = {'is_valid': 0, 'error': f'Generation failed: {q.generation_error}', 'score': None}
+        elif q.hand:
             hand_json = q.hand.model_dump_json()
             details = (await validator.validate_batch([hand_json], [None]))[0]
         else:
@@ -46,13 +59,62 @@ async def generate_command_async(args):
         if details.get('score') is not None:
             q.expected_score = details['score']
 
-    return questions, validation_details
+    # 指示適合性の判定（CSV生成時のみ）
+    compliance_results = []
+    has_instructions = any(q.instruction for q in questions)
+
+    if has_instructions:
+        logger.info("Judging instruction compliance with LLM...")
+
+        # OpenAIクライアントを直接使用（DSPyは不要）
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        for q, details in zip(questions, validation_details):
+            if q.instruction and details.get('score') is not None:
+                # プロンプトを構築
+                prompt = f"""生成された麻雀問題が指示に従っているかを評価してください。
+
+指示: {q.instruction}
+
+実際の結果:
+- 計算された点数: {details.get('score', 'N/A')}
+- 翻数: {details.get('han', 'N/A')}
+- 符数: {details.get('fu', 'N/A')}
+- 役: {details.get('yaku', [])}
+
+判定基準:
+1. 指示に「答えがN点」と指定されている場合、計算された点数がN点と一致するか
+2. 指示に「M翻N符」と指定されている場合、翻数がM翻、符数がN符と一致するか
+3. 指示に特定の役（例：タンヤオ、三色同順など）が指定されている場合、役リストにその役が含まれているか
+4. 指示に「暗刻がN個」などの構成が指定されている場合、それが満たされているか（役リストから推測）
+
+上記全ての条件が満たされている場合のみ「Yes」、一つでも満たされていない場合は「No」と回答してください。
+理由も簡潔に説明してください。
+
+回答形式: Yes/No
+理由: （簡潔な説明）"""
+
+                # OpenAI APIを直接呼び出し
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.0
+                )
+
+                compliance_result = response.choices[0].message.content
+                compliance_results.append(compliance_result)
+            else:
+                compliance_results.append(None)
+
+    return questions, validation_details, compliance_results
 
 
 def generate_command(args):
     """問題生成コマンド"""
     import asyncio
-    questions, validation_details = asyncio.run(generate_command_async(args))
+    questions, validation_details, compliance_results = asyncio.run(generate_command_async(args))
 
     # 結果を表示
     validation_results = []
@@ -60,13 +122,25 @@ def generate_command(args):
         print(f"\n{'='*60}")
         print(f"問題 {i}:")
         print(f"{'='*60}")
-        print(f"{q.question}\n")
 
-        # 抽出されたHandオブジェクトを表示
-        if q.hand:
-            print("抽出された手牌情報:")
-            print(json.dumps(json.loads(q.hand.model_dump_json()), indent=2, ensure_ascii=False))
+        # 指示があれば表示
+        if q.instruction:
+            print(f"指示: {q.instruction}")
             print()
+
+        # 生成エラーがあれば表示
+        if q.generation_error:
+            print(f"⚠️  問題生成エラー: {q.generation_error}\n")
+        elif q.question:
+            print(f"{q.question}\n")
+
+            # 抽出されたHandオブジェクトを表示
+            if q.hand:
+                print("抽出された手牌情報:")
+                print(json.dumps(json.loads(q.hand.model_dump_json()), indent=2, ensure_ascii=False))
+                print()
+        else:
+            print("問題文が生成されませんでした\n")
 
         if args.verbose and q.expected_score:
             print(f"計算された点数: {q.expected_score}\n")
@@ -75,6 +149,11 @@ def generate_command(args):
         result = details.get('is_valid', 0)
         validation_status = "✓ 正しい" if result == 1 else "✗ 間違っている"
         print(f"検証結果: {validation_status} (スコア: {result})")
+
+        # 指示適合性の判定結果を表示
+        if compliance_results and i-1 < len(compliance_results) and compliance_results[i-1]:
+            print(f"指示適合性: {compliance_results[i-1]}")
+
         print()
 
         validation_results.append({
@@ -154,6 +233,7 @@ def generate_command(args):
     print("検証統計:")
     print(f"{'='*60}")
     total = len(validation_results)
+    generation_failed = sum(1 for q in questions if q.generation_error)
     calculated = sum(1 for r in validation_results if r["calculated"])
     correct = sum(1 for r in validation_results if r["is_valid"])
     incorrect = total - correct
@@ -161,10 +241,22 @@ def generate_command(args):
     calc_rate = (calculated / total * 100) if total > 0 else 0
 
     print(f"総問題数: {total}")
+    if generation_failed > 0:
+        print(f"問題生成失敗: {generation_failed}")
     print(f"点数計算成功: {calculated} ({calc_rate:.1f}%)")
     print(f"点数一致: {correct}")
     print(f"点数不一致: {incorrect}")
     print(f"正答率: {accuracy:.1f}%")
+
+    # 指示適合性の統計
+    if compliance_results:
+        compliant_count = sum(1 for c in compliance_results if c and "Yes" in c)
+        non_compliant_count = sum(1 for c in compliance_results if c and "No" in c)
+        compliance_rate = (compliant_count / len([c for c in compliance_results if c]) * 100) if any(compliance_results) else 0
+        print(f"\n指示適合性:")
+        print(f"適合: {compliant_count}")
+        print(f"不適合: {non_compliant_count}")
+        print(f"適合率: {compliance_rate:.1f}%")
 
     print(f"\n{'='*60}")
     print(f"生成した問題を {output_path} に保存しました")
@@ -305,48 +397,6 @@ def _print_validation_details(details):
     print(f"{'='*60}\n")
 
 
-def optimize_command(args):
-    """最適化コマンド"""
-    optimizer = QuestionOptimizer(model=args.model)
-
-    # トレーニングデータセットを作成
-    difficulties = []
-    for _ in range(args.easy):
-        difficulties.append("easy")
-    for _ in range(args.medium):
-        difficulties.append("medium")
-    for _ in range(args.hard):
-        difficulties.append("hard")
-
-    trainset = optimizer.create_trainset(difficulties)
-
-    print(f"トレーニングデータセット: {len(trainset)}件")
-    print("最適化を開始します...")
-
-    # 最適化を実行
-    optimized_generator = optimizer.optimize(
-        trainset=trainset,
-        optimizer_type=args.optimizer_type,
-        max_bootstrapped_demos=args.max_bootstrapped_demos,
-        max_labeled_demos=args.max_labeled_demos,
-        num_candidates=args.num_candidates,
-        init_temperature=args.init_temperature,
-    )
-
-    print("最適化が完了しました！")
-
-    # 最適化されたモジュールを保存
-    output_path = args.output if args.output else f"optimized_{args.optimizer_type}.json"
-    optimized_generator.save(output_path)
-    print(f"\n最適化されたプロンプトを {output_path} に保存しました")
-
-    # サンプル生成
-    if args.test:
-        print("\n最適化されたジェネレーターでテスト生成:")
-        result = optimized_generator(difficulty="medium")
-        print(f"質問: {result.question}")
-        print(f"Hand JSON: {result.hand_json}")
-        print(f"LLMが考えた答え: {result.expected_score}")
 
 
 def main():
@@ -377,7 +427,7 @@ def main():
         "-o", "--output", help="生成した問題を保存するJSONファイルのパス"
     )
     generate_parser.add_argument(
-        "--load-optimized", help="最適化されたプロンプトのパス（optimize コマンドで保存したファイル）"
+        "--csv", help="指示パターンを定義したCSVファイルのパス。指定された場合、CSVから問題を生成します。"
     )
     generate_parser.add_argument(
         "--langfuse", action="store_true", help="Langfuseトレーシングを有効化"
@@ -396,60 +446,6 @@ def main():
         "-s", "--expected-score", type=int, help="期待される点数"
     )
     validate_parser.set_defaults(func=validate_command)
-
-    # 最適化コマンド
-    optimize_parser = subparsers.add_parser(
-        "optimize", help="問題生成プロンプトを最適化する"
-    )
-    optimize_parser.add_argument(
-        "--easy", type=int, default=3, help="easyの問題数（デフォルト: 3）"
-    )
-    optimize_parser.add_argument(
-        "--medium", type=int, default=3, help="mediumの問題数（デフォルト: 3）"
-    )
-    optimize_parser.add_argument(
-        "--hard", type=int, default=2, help="hardの問題数（デフォルト: 2）"
-    )
-    optimize_parser.add_argument(
-        "--optimizer-type",
-        choices=["bootstrap", "mipro", "copro"],
-        default="mipro",
-        help="最適化手法（デフォルト: mipro）- bootstrap: Few-shot追加, mipro: プロンプト書き換え（推奨）, copro: プロンプト座標最適化",
-    )
-    optimize_parser.add_argument(
-        "--max-bootstrapped-demos",
-        type=int,
-        default=4,
-        help="ブートストラップされるデモの最大数（bootstrap用、デフォルト: 4）",
-    )
-    optimize_parser.add_argument(
-        "--max-labeled-demos",
-        type=int,
-        default=4,
-        help="ラベル付きデモの最大数（bootstrap用、デフォルト: 4）",
-    )
-    optimize_parser.add_argument(
-        "--num-candidates",
-        type=int,
-        default=15,
-        help="候補プロンプト数（mipro用、デフォルト: 15）",
-    )
-    optimize_parser.add_argument(
-        "--init-temperature",
-        type=float,
-        default=1.0,
-        help="初期temperature（mipro用）",
-    )
-    optimize_parser.add_argument(
-        "-m", "--model", default="gpt-4o-mini", help="使用するモデル"
-    )
-    optimize_parser.add_argument(
-        "-t", "--test", action="store_true", help="最適化後にテスト生成を実行"
-    )
-    optimize_parser.add_argument(
-        "-o", "--output", help="最適化されたプロンプトの保存先（デフォルト: optimized_{optimizer_type}.json）"
-    )
-    optimize_parser.set_defaults(func=optimize_command)
 
     args = parser.parse_args()
 
