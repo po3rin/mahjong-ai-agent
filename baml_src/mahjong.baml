@@ -10,7 +10,9 @@ generator baml_client {
 // 牌の種類を文字列型で定義
 // aliasが効かないため、直接文字列として定義する
 // 有効な値: "1m"〜"9m", "1p"〜"9p", "1s"〜"9s", "1z"〜"7z"
-type TileType = string
+type TileType = string @assert(valid_tile, {{
+  this|regex_match("^[1-9][mps]$") or this|regex_match("^[1-7]z$")
+}})
 
 // 風の種類を文字列型で定義
 // aliasが効かないため、直接文字列として定義する
@@ -25,8 +27,9 @@ class MeldInfo {
 
 // 麻雀の手牌情報
 class Hand {
-  tiles TileType[] @description("手牌の牌リスト。和了牌(win_tile)を含む14枚。鳴いた牌は含めない。形式: '1m', '2p', '3s', '1z'など") @assert(min_tiles, {{ this|length >= 14 }})
-  melds MeldInfo[] | null @description("鳴いた牌のリスト。ポン/チー/カンがある場合に設定。ない場合はnull")
+  tiles TileType[] @description("手牌の牌リスト。和了牌(win_tile)を含む。鳴いた牌も全て含める。カンがない場合は正確に14枚、カンがある場合はカン1つにつき1枚追加(15-18枚)。形式: '1m', '2p', '3s', '1z'など")
+    @assert(tile_count, {{ this|length == 14 or this|length == 15 or this|length == 16 or this|length == 17 or this|length == 18 }})
+  melds MeldInfo[] | null @description("鳴いた牌のリスト。ポン/チー/カンがある場合に設定。ない場合はnull。meldsに含まれる牌は全てtilesにも存在する必要がある")
   win_tile TileType @description("アガリ牌。tilesにも含まれている必要がある (例: '1m')")
   dora_indicators TileType[] | null @description("ドラ表示牌のリスト")
   // 状況フラグ(デフォルト: false)
@@ -58,42 +61,6 @@ client<llm> GPT4oMini {
   }
 }
 
-// JSON文字列を確実にHand型に変換する関数
-function ParseHandFromJSON(json_string: string) -> Hand {
-  client GPT4oMini
-  prompt #"
-    以下のJSON文字列をHand型のオブジェクトに変換してください。
-    不足しているフィールドはデフォルト値で埋めてください。
-
-    入力JSON:
-    {{ json_string }}
-
-    重要: 牌の表記は必ず小文字の形式（"1m", "2p", "3s", "1z"）で出力してください。
-    大文字形式（"ONE_M", "TWO_P"など）が入力に含まれていた場合は、必ず小文字形式に変換してください。
-    変換例:
-    - "ONE_M" → "1m", "TWO_M" → "2m", "FIVE_P" → "5p"
-    - "EAST" → "1z" (東の牌), "SOUTH" → "2z" (南の牌), "WEST" → "3z" (西の牌), "NORTH" → "4z" (北の牌)
-    - "WHITE" → "5z" (白), "GREEN" → "6z" (発), "RED" → "7z" (中)
-
-    注意: player_windやround_windは "east", "south", "west", "north" のままで問題ありません。
-
-    出力に含める必須フィールド:
-    - tiles: 牌の配列。和了牌(win_tile)を含む14枚。形式: "1m", "2p", "3s", "1z"
-    - melds: nullまたはMeldInfoの配列
-    - win_tile: アガリ牌。tilesの中にも必ず含まれている必要がある。形式: "1m", "2p"など
-    - dora_indicators: nullまたはドラ表示牌の配列。形式: "1m", "2p"など
-    - is_riichi, is_tsumo, is_ippatsu, is_rinshan, is_chankan, is_haitei, is_houtei, is_daburu_riichi, is_nagashi_mangan, is_tenhou, is_chiihou, is_renhou, is_open_riichi: boolean型 (デフォルト: false)
-    - player_wind, round_wind: nullまたは文字列 (east/south/west/north)
-    - kyoutaku_number, tsumi_number: 整数 (デフォルト: 0)
-
-    重要: win_tileはtilesの中に必ず存在する必要があります。
-
-    Hand型に適合する有効なJSONオブジェクトとして出力してください。
-    コメントや説明文は含めないでください。
-    JSONオブジェクトのみを出力してください。
-  "#
-}
-
 // 自然言語の問題文から手牌データを構造化抽出する関数
 function ExtractHandFromQuestion(question: string) -> Hand {
   client GPT4oMini
@@ -106,10 +73,16 @@ function ExtractHandFromQuestion(question: string) -> Hand {
     重要: 牌の表記は必ず小文字の形式（例: "1m", "2p", "3s", "1z"）を使用してください。
     大文字の形式（例: "ONE_M", "TWO_P"）は使用しないでください。
 
+    **牌の有効範囲（これ以外の牌は絶対に使用しないこと）:**
+    - 萬子(m): 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m
+    - 筒子(p): 1p, 2p, 3p, 4p, 5p, 6p, 7p, 8p, 9p
+    - 索子(s): 1s, 2s, 3s, 4s, 5s, 6s, 7s, 8s, 9s
+    - 字牌(z): 1z, 2z, 3z, 4z, 5z, 6z, 7z のみ（8z, 9zは存在しません）
+
     出力形式(全てのフィールドを含めること):
     {
-      "tiles": [...],  // 問題文から抽出した手牌。和了牌を含む14枚以上。鳴いた牌は含めない。形式: "1m", "2p", "3s", "1z"
-      "melds": null,  // 鳴き情報。ポン/チー/カンがある場合は配列で設定
+      "tiles": [...],  // 問題文から抽出した手牌。和了牌を含む。通常14枚だがカンがある場合は15枚以上。**鳴いた牌も全て含める必要がある**。形式: "1m", "2p", "3s", "1z"
+      "melds": null,  // 鳴き情報。ポン/チー/カンがある場合は配列で設定。**meldsに含まれる牌は全てtilesにも存在する必要がある**
       "win_tile": "...",  // アガリ牌。tilesの中にも必ず含まれている必要がある。形式: "1m"など
       "dora_indicators": null,  // ドラ表示牌がある場合は配列で設定。形式: "1m"など
       "is_riichi": false,  // リーチが言及されていればtrue
@@ -131,9 +104,17 @@ function ExtractHandFromQuestion(question: string) -> Hand {
       "tsumi_number": 0  // 積み棒の数（100点単位）。"X本場"なら本場数×3で計算（例: 2本場なら6）。言及されていない限り0
     }
 
-    tilesとwin_tileの関係について重要な注意事項:
-    - tilesは和了牌(win_tile)を含む14枚である必要があります
-    - win_tileはtilesの中に必ず存在する必要があります
+    **最重要**: tilesとwin_tileの関係について
+    1. 問題文に「手牌は以下の通り：A, B, C, ...」と列挙されている牌を**そのまま正確に**tilesにコピーしてください
+    2. 問題文に「和了牌は○○」と書かれている牌をwin_tileに設定してください
+    3. **絶対にwin_tileをtilesに追加しないでください！**
+       - 問題文の手牌には既に和了牌が含まれています
+       - tilesに和了牌を追加すると15枚になってしまいエラーになります
+    4. 例:
+       問題文「手牌は以下の通り：1m, 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m, 9m, 9m, 5p, 5p. 和了牌は5p」
+       → tiles: ["1m", "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "9m", "9m", "5p", "5p"] (14枚)
+       → win_tile: "5p"
+       → ❌ 間違い: tiles: [..., "5p", "5p", "5p"] (5pを追加して15枚にする)
 
     和了形のパターン:
     1. 通常の和了形（4面子1雀頭）:
@@ -161,6 +142,16 @@ function ExtractHandFromQuestion(question: string) -> Hand {
     - 例1: "1mをポン"の場合 → "melds": [{"tiles": ["1m", "1m", "1m"], "is_open": true}]
     - 例2: "2pをチー、5sをポン"の場合 → "melds": [{"tiles": ["2p", "3p", "4p"], "is_open": true}, {"tiles": ["5s", "5s", "5s"], "is_open": true}]
     - 鳴きがない場合のみ null を設定
+
+    **最重要**: meldsに含まれる牌は、必ず全てtilesにも含まれている必要があります。
+
+    例1 (ポン): 「手牌: 1s, 1s, 2z, 2z, 2z. 鳴き: 3zをポン」の場合
+    → tiles: ["1s", "1s", "2z", "2z", "2z", "3z", "3z", "3z"] (鳴いた3z×3も含める! 合計8枚だが、残り6枚+和了牌で14枚)
+    → melds: [{"tiles": ["3z", "3z", "3z"], "is_open": true}]
+
+    例2 (カン): 「手牌: 1s, 1s, 2z, 2z, 2z. 鳴き: 3zを明カン」の場合
+    → tiles: ["1s", "1s", "2z", "2z", "2z", "3z", "3z", "3z", "3z", ...] (カンで引いた牌も含め15枚以上)
+    → melds: [{"tiles": ["3z", "3z", "3z", "3z"], "is_open": true}]
 
     重要:
     - 全てのフィールドを出力に含めること

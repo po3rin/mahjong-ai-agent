@@ -15,7 +15,11 @@ logger = logging.getLogger(__name__)
 
 async def parse_hand_with_baml(hand_json: str) -> Hand:
     """
-    BAMLを使ってJSON文字列を確実にHand型にパースする
+    JSON文字列を確実にHand型にパースする
+
+    Note: 以前はBAMLのParseHandFromJSONを使っていたが、
+    LLMがwin_tileをtilesに追加してしまう問題があったため、
+    直接JSONパースに変更
 
     Args:
         hand_json: Hand形式のJSON文字列
@@ -27,25 +31,27 @@ async def parse_hand_with_baml(hand_json: str) -> Hand:
         Exception: パースに失敗した場合
     """
     try:
-        logger.info("Parsing hand JSON with BAML...")
+        logger.info("Parsing hand JSON directly...")
 
-        # BAMLで構造化パース（非同期版）
-        hand = await async_b.ParseHandFromJSON(hand_json)
+        # 直接JSONパース（BAMLを使わない）
+        hand_data = json.loads(hand_json)
+        hand = Hand(**hand_data)
 
-        logger.info("Successfully parsed hand with BAML")
+        logger.info("Successfully parsed hand JSON")
         return hand
 
     except Exception as e:
-        logger.error(f"BAML parsing failed: {str(e)}")
-        # フォールバック: 従来のJSONパース（エラー時のみ）
-        logger.warning("Falling back to standard JSON parsing...")
-        hand_data = json.loads(hand_json)
-        return Hand(**hand_data)
+        logger.error(f"JSON parsing failed: {str(e)}")
+        raise
 
 
 def parse_hand_with_baml_sync(hand_json: str) -> Hand:
     """
-    BAMLを使ってJSON文字列を確実にHand型にパースする（同期版）
+    JSON文字列を確実にHand型にパースする（同期版）
+
+    Note: 以前はBAMLのParseHandFromJSONを使っていたが、
+    LLMがwin_tileをtilesに追加してしまう問題があったため、
+    直接JSONパースに変更
 
     Args:
         hand_json: Hand形式のJSON文字列
@@ -57,20 +63,18 @@ def parse_hand_with_baml_sync(hand_json: str) -> Hand:
         Exception: パースに失敗した場合
     """
     try:
-        logger.info("Parsing hand JSON with BAML (sync)...")
+        logger.info("Parsing hand JSON directly (sync)...")
 
-        # BAMLの同期クライアントを使用
-        hand = sync_b.ParseHandFromJSON(hand_json)
+        # 直接JSONパース（BAMLを使わない）
+        hand_data = json.loads(hand_json)
+        hand = Hand(**hand_data)
 
-        logger.info("Successfully parsed hand with BAML (sync)")
+        logger.info("Successfully parsed hand JSON (sync)")
         return hand
 
     except Exception as e:
-        logger.error(f"BAML parsing failed: {str(e)}")
-        # フォールバック: 従来のJSONパース（エラー時のみ）
-        logger.warning("Falling back to standard JSON parsing...")
-        hand_data = json.loads(hand_json)
-        return Hand(**hand_data)
+        logger.error(f"JSON parsing failed: {str(e)}")
+        raise
 
 
 async def extract_hand_from_question(question: str) -> Hand:
@@ -91,6 +95,15 @@ async def extract_hand_from_question(question: str) -> Hand:
 
         # BAMLで問題文から構造化データを抽出（非同期版）
         hand = await async_b.ExtractHandFromQuestion(question)
+
+        # 修正: カンがない場合に15枚以上の場合、win_tileが重複している可能性があるので修正
+        has_kan = hand.melds and any(len(meld.tiles) == 4 for meld in hand.melds)
+        if not has_kan and len(hand.tiles) > 14:
+            # 最後の牌がwin_tileと一致する場合、重複なので削除
+            if hand.tiles[-1] == hand.win_tile:
+                logger.warning(f"Detected duplicate win_tile at end of tiles. Removing last tile. Before: {len(hand.tiles)} tiles")
+                hand.tiles = hand.tiles[:-1]
+                logger.warning(f"After: {len(hand.tiles)} tiles")
 
         logger.info("Successfully extracted hand from question with BAML")
         return hand

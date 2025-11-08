@@ -105,20 +105,6 @@ class BamlSyncClient:
                 "question": question,
             })
             return typing.cast(types.Hand, result.cast_to(types, types, stream_types, False, __runtime__))
-    def ParseHandFromJSON(self, json_string: str,
-        baml_options: BamlCallOptions = {},
-    ) -> types.Hand:
-        # Check if on_tick is provided
-        if 'on_tick' in baml_options:
-            stream = self.stream.ParseHandFromJSON(json_string=json_string,
-                baml_options=baml_options)
-            return stream.get_final_response()
-        else:
-            # Original non-streaming code
-            result = self.__options.merge_options(baml_options).call_function_sync(function_name="ParseHandFromJSON", args={
-                "json_string": json_string,
-            })
-            return typing.cast(types.Hand, result.cast_to(types, types, stream_types, False, __runtime__))
     
 
 
@@ -133,18 +119,6 @@ class BamlStreamClient:
     ) -> baml_py.BamlSyncStream[stream_types.Hand, types.Hand]:
         ctx, result = self.__options.merge_options(baml_options).create_sync_stream(function_name="ExtractHandFromQuestion", args={
             "question": question,
-        })
-        return baml_py.BamlSyncStream[stream_types.Hand, types.Hand](
-          result,
-          lambda x: typing.cast(stream_types.Hand, x.cast_to(types, types, stream_types, True, __runtime__)),
-          lambda x: typing.cast(types.Hand, x.cast_to(types, types, stream_types, False, __runtime__)),
-          ctx,
-        )
-    def ParseHandFromJSON(self, json_string: str,
-        baml_options: BamlCallOptions = {},
-    ) -> baml_py.BamlSyncStream[stream_types.Hand, types.Hand]:
-        ctx, result = self.__options.merge_options(baml_options).create_sync_stream(function_name="ParseHandFromJSON", args={
-            "json_string": json_string,
         })
         return baml_py.BamlSyncStream[stream_types.Hand, types.Hand](
           result,
@@ -167,13 +141,6 @@ class BamlHttpRequestClient:
             "question": question,
         }, mode="request")
         return result
-    def ParseHandFromJSON(self, json_string: str,
-        baml_options: BamlCallOptions = {},
-    ) -> baml_py.baml_py.HTTPRequest:
-        result = self.__options.merge_options(baml_options).create_http_request_sync(function_name="ParseHandFromJSON", args={
-            "json_string": json_string,
-        }, mode="request")
-        return result
     
 
 class BamlHttpStreamRequestClient:
@@ -187,13 +154,6 @@ class BamlHttpStreamRequestClient:
     ) -> baml_py.baml_py.HTTPRequest:
         result = self.__options.merge_options(baml_options).create_http_request_sync(function_name="ExtractHandFromQuestion", args={
             "question": question,
-        }, mode="stream")
-        return result
-    def ParseHandFromJSON(self, json_string: str,
-        baml_options: BamlCallOptions = {},
-    ) -> baml_py.baml_py.HTTPRequest:
-        result = self.__options.merge_options(baml_options).create_http_request_sync(function_name="ParseHandFromJSON", args={
-            "json_string": json_string,
         }, mode="stream")
         return result
     

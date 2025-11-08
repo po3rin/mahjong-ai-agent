@@ -88,23 +88,20 @@ OPENAI_API_KEY=your_openai_api_key_here
 全てBAMLによる構造化チェックが走る
 
 ```bash
-# 基本的な使い方（medium難易度の問題を1問生成）
+# 基本的な使い方（問題を1問生成）
 uv run python main.py generate
 
-# 難易度を指定して複数問生成
-uv run python main.py generate -d easy -n 3
+# 複数問生成
+uv run python main.py generate -n 3
 
 # 詳細情報を表示
-uv run python main.py generate -d hard -n 2 -v
+uv run python main.py generate -n 2 -v
 
 # モデルを指定
 uv run python main.py generate -m gpt-4o -n 1
 
 # カスタムパスに保存
-uv run python main.py generate -d medium -n 5 -o custom/path/questions.json
-
-# 最適化されたプロンプトを使用
-uv run python main.py generate -d medium -n 5 --load-optimized optimized_mipro.json
+uv run python main.py generate -n 5 -o custom/path/questions.json
 ```
 
 ### CSV指示ファイルからの問題生成 🆕
@@ -115,11 +112,11 @@ uv run python main.py generate -d medium -n 5 --load-optimized optimized_mipro.j
 
 ```csv
 instruction
-難易度easyで、タンヤオの問題を作成してください
-難易度mediumで、答えが2000点になる問題を作成してください
-難易度hardで、三色同順の問題を作成してください
-難易度hardで、暗刻が二つあり、答えが8000点になる問題を作成してください
-難易度mediumで、3翻30符の問題を作成してください
+タンヤオの問題を作成してください
+答えが2000点になる問題を作成してください
+三色同順の問題を作成してください
+暗刻が二つあり、答えが8000点になる問題を作成してください
+3翻30符の問題を作成してください
 ```
 
 #### 使い方
@@ -143,7 +140,7 @@ uv run python main.py generate --csv patterns.csv -o dist/csv_questions.json
 ```
 問題 1:
 ============================================================
-指示: 難易度mediumで、答えが2000点になる問題を作成してください
+指示: 答えが2000点になる問題を作成してください
 
 東場0本場、あなたは東家。ドラ表示牌は3m（ドラは4m）。ツモで和了しました。
 手牌は以下の通り：2m, 3m, 4m, 5m, 6m, 7m, 2p, 3p, 4p, 5s, 6s, 7s, 8s, 8s
@@ -172,7 +169,6 @@ uv run python main.py generate --csv patterns.csv -o dist/csv_questions.json
 
 ```json
 {
-  "difficulty": "medium",
   "model": "gpt-4o-mini",
   "questions": [
     {
@@ -188,53 +184,6 @@ uv run python main.py generate --csv patterns.csv -o dist/csv_questions.json
     }
   ]
 }
-```
-
-### 問題の検証
-
-```bash
-# JSONファイルから検証
-uv run python main.py validate -f questions.json
-
-# 単一の手牌を検証
-uv run python main.py validate -f hand.json
-
-# 期待点数を指定して検証
-uv run python main.py validate -f hand.json -s 5200
-```
-
-### プロンプトの最適化
-
-DSPyを使用して、問題生成プロンプトを自動的に最適化します。
-
-```bash
-# 基本的な使い方（デフォルト: MIPRO）
-uv run python main.py optimize
-
-# MIPROを使用（推奨）
-uv run python main.py optimize --optimizer-type mipro --easy 5 --medium 5 --hard 3
-
-# Bootstrapを使用
-uv run python main.py optimize --optimizer-type bootstrap --easy 4 --medium 4 --hard 2
-
-# COPROを使用
-uv run python main.py optimize --optimizer-type copro --easy 4 --medium 4 --hard 2
-
-# 最適化後にテスト生成
-uv run python main.py optimize --optimizer-type mipro -t
-
-# カスタムパスに保存
-uv run python main.py optimize --optimizer-type mipro -o my_optimized.json
-```
-
-#### 最適化されたプロンプトの使用
-
-```bash
-# 最適化なし（初期プロンプト）
-uv run python main.py generate -d medium -n 5
-
-# 最適化されたプロンプトで問題生成
-uv run python main.py generate -d medium -n 5 --load-optimized optimized_mipro.json
 ```
 
 ## プロジェクト構成
@@ -297,37 +246,9 @@ mahjong-ai-agent/
 
 ### 主要コンポーネント
 
-#### 1. DSPy問題文生成 (`mahjong_ai_agent/dspy_modules.py`)
-
-**役割**: 自然言語での問題文生成に特化
-
-```python
-class MahjongQuestionSignature(dspy.Signature):
-    instruction = dspy.InputField(
-        desc="問題生成の指示（例：難易度mediumで、答えが2000点になる問題を作成してください）"
-    )
-    question = dspy.OutputField(desc="麻雀の点数計算問題の問題文")
-```
-
-**特徴**:
-- 自然言語の指示から問題文を生成
-- 問題文のみを生成（構造化データはBAMLが担当）
-- ChainOfThoughtによる推論
-- プロンプト最適化で品質向上
-
-#### 1-2. LLM-as-a-Judge (`mahjong_ai_agent/dspy_modules.py`)
+#### 1. LLM-as-a-Judge (`mahjong_ai_agent/verifier.py`)
 
 **役割**: 生成された問題が指示に従っているかを判定
-
-```python
-class InstructionComplianceJudge(dspy.Signature):
-    instruction = dspy.InputField(desc="問題生成時の指示")
-    calculated_score = dspy.InputField(desc="実際に計算された点数")
-    calculated_han = dspy.InputField(desc="実際に計算された翻数")
-    calculated_fu = dspy.InputField(desc="実際に計算された符数")
-    yaku_list = dspy.InputField(desc="実際に成立した役のリスト")
-    is_compliant = dspy.OutputField(desc="指示との適合性を判定")
-```
 
 **特徴**:
 - CSV指示生成時に自動実行
@@ -383,23 +304,23 @@ function ExtractHandFromQuestion(question: string) -> Hand {
 
 #### 3. 統合ジェネレーター (`mahjong_ai_agent/generator.py`)
 
-**役割**: DSPyとBAMLを統合
+**役割**: LLMとBAMLを統合
 
 ```python
-async def generate_question(self, difficulty: str, num_questions: int):
-    # 1. DSPyで問題文生成
-    result = self.generator(difficulty=difficulty, ...)
+async def generate_question(self, num_questions: int):
+    # 1. LLMで問題文生成
+    result = await self._generate_single_question(instruction)
 
     # 2. BAMLで構造化データ抽出
-    hand = await extract_hand_from_question(result.question)
+    hand = await extract_hand_from_question(result)
 
-    return MahjongQuestion(question=result.question, hand=hand)
+    return MahjongQuestion(question=result, hand=hand)
 ```
 
 **特徴**:
 - 非同期並列処理
-- DSPyとBAMLのシームレスな統合
-- 各コンポーネントの強みを活用
+- BAMLによる構造化データ抽出
+- 型安全な問題生成
 
 #### 4. BAML統合バリデーター (`mahjong_ai_agent/validator.py`)
 
@@ -427,15 +348,14 @@ async def validate_with_details(self, hand_json: str):
 
 ```
 1. User Input
-   ├─ 通常生成: 難易度, 問題数
+   ├─ 通常生成: 問題数
    └─ CSV生成: 指示ファイル, 問題数（オプション）
    ↓
 2. QuestionGenerator.generate_question() / generate_questions_from_csv()
    ↓
-3. DSPy: 問題文生成
-   ├─ MahjongQuestionModule(instruction)
-   ├─ instruction例: "難易度mediumで、答えが2000点になる問題を作成してください"
-   ├─ ChainOfThought (推論)
+3. LLM: 問題文生成
+   ├─ _generate_single_question(instruction)
+   ├─ instruction例: "答えが2000点になる問題を作成してください"
    └─ OpenAI API → 問題文（自然言語）
    ↓
 4. BAML: 構造化データ抽出
@@ -455,7 +375,7 @@ async def validate_with_details(self, hand_json: str):
    └─ Yes/No + 理由
    ↓
 7. Output: JSON ファイルに保存 + 統計表示
-   ├─ dist/questions_{difficulty}_{timestamp}.json
+   ├─ dist/questions_{timestamp}.json
    └─ 適合率の統計情報（CSV生成時）
 ```
 
@@ -524,19 +444,7 @@ async def validate_with_details(self, hand_json: str):
 
 3. **詳細モードでデバッグ**: 問題発生時に有効
    ```bash
-   uv run python main.py generate -v -d easy -n 1
-   ```
-
-### 最適化時
-
-1. **十分なトレーニングデータ**: 各難易度で5問以上推奨
-   ```bash
-   uv run python main.py optimize --easy 5 --medium 5 --hard 3
-   ```
-
-2. **MIPROの活用**: 最も効果的な最適化
-   ```bash
-   uv run python main.py optimize --optimizer-type mipro --num-candidates 20
+   uv run python main.py generate -v -n 1
    ```
 
 3. **定期的な再最適化**: 新しいパターンを学習
@@ -590,14 +498,6 @@ A:
    ```
 2. BAML定義ファイル（`baml_src/mahjong.baml`）を確認
 
-### 問題: 最適化が改善されない
-
-**解決策**:
-1. トレーニングデータを増やす（各難易度10問以上）
-2. num_candidatesを増やす（MIPRO）
-   ```bash
-   uv run python main.py optimize --optimizer-type mipro --num-candidates 30
-   ```
 
 ## ライセンス
 

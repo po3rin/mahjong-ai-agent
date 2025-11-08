@@ -22,13 +22,16 @@ def convert_wind_to_constant(wind: str) -> int:
         wind: 風の文字列 ("east", "south", "west", "north")
 
     Returns:
-        int: 風の定数 (0=東, 1=南, 2=西, 3=北)
+        int: 風の定数 (27=東, 28=南, 29=西, 30=北)
+        これは34形式のタイルインデックスと同じ値
     """
+    from mahjong.constants import EAST, SOUTH, WEST, NORTH
+
     wind_map = {
-        "east": 0,
-        "south": 1,
-        "west": 2,
-        "north": 3,
+        "east": EAST,    # 27
+        "south": SOUTH,  # 28
+        "west": WEST,    # 29
+        "north": NORTH,  # 30
     }
     if wind not in wind_map:
         raise ValueError(f"Invalid wind value: {wind}")
