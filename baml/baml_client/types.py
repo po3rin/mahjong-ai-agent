@@ -37,50 +37,8 @@ def get_checks(checks: typing.Dict[CheckName, Check]) -> typing.List[Check]:
 def all_succeeded(checks: typing.Dict[CheckName, Check]) -> bool:
     return all(check.status == "succeeded" for check in get_checks(checks))
 # #########################################################################
-# Generated enums (2)
+# Generated enums (0)
 # #########################################################################
-
-class TileType(str, Enum):
-    ONE_M = "ONE_M"
-    TWO_M = "TWO_M"
-    THREE_M = "THREE_M"
-    FOUR_M = "FOUR_M"
-    FIVE_M = "FIVE_M"
-    SIX_M = "SIX_M"
-    SEVEN_M = "SEVEN_M"
-    EIGHT_M = "EIGHT_M"
-    NINE_M = "NINE_M"
-    ONE_P = "ONE_P"
-    TWO_P = "TWO_P"
-    THREE_P = "THREE_P"
-    FOUR_P = "FOUR_P"
-    FIVE_P = "FIVE_P"
-    SIX_P = "SIX_P"
-    SEVEN_P = "SEVEN_P"
-    EIGHT_P = "EIGHT_P"
-    NINE_P = "NINE_P"
-    ONE_S = "ONE_S"
-    TWO_S = "TWO_S"
-    THREE_S = "THREE_S"
-    FOUR_S = "FOUR_S"
-    FIVE_S = "FIVE_S"
-    SIX_S = "SIX_S"
-    SEVEN_S = "SEVEN_S"
-    EIGHT_S = "EIGHT_S"
-    NINE_S = "NINE_S"
-    EAST = "EAST"
-    SOUTH = "SOUTH"
-    WEST = "WEST"
-    NORTH = "NORTH"
-    WHITE = "WHITE"
-    GREEN = "GREEN"
-    RED = "RED"
-
-class WindType(str, Enum):
-    EAST = "EAST"
-    SOUTH = "SOUTH"
-    WEST = "WEST"
-    NORTH = "NORTH"
 
 # #########################################################################
 # Generated classes (2)
@@ -106,7 +64,6 @@ class Hand(BaseModel):
     is_open_riichi: bool
     player_wind: typing.Optional[str] = None
     round_wind: typing.Optional[str] = None
-    paarenchan: int
     kyoutaku_number: int
     tsumi_number: int
 
@@ -115,5 +72,11 @@ class MeldInfo(BaseModel):
     is_open: bool
 
 # #########################################################################
-# Generated type aliases (0)
+# Generated type aliases (2)
 # #########################################################################
+
+
+TileType: typing_extensions.TypeAlias = str
+
+
+WindType: typing_extensions.TypeAlias = str

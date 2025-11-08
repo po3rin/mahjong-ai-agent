@@ -23,8 +23,4 @@ type_map = {
     "stream_types.MeldInfo": stream_types.MeldInfo,
 
 
-    "types.TileType": types.TileType,
-
-    "types.WindType": types.WindType,
-
 }

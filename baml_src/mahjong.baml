@@ -7,58 +7,15 @@ generator baml_client {
   version "0.211.2"
 }
 
-// 牌の種類を列挙型で定義
-enum TileType {
-  // 萬子（マンズ）
-  ONE_M @alias("1m")
-  TWO_M @alias("2m")
-  THREE_M @alias("3m")
-  FOUR_M @alias("4m")
-  FIVE_M @alias("5m")
-  SIX_M @alias("6m")
-  SEVEN_M @alias("7m")
-  EIGHT_M @alias("8m")
-  NINE_M @alias("9m")
+// 牌の種類を文字列型で定義
+// aliasが効かないため、直接文字列として定義する
+// 有効な値: "1m"〜"9m", "1p"〜"9p", "1s"〜"9s", "1z"〜"7z"
+type TileType = string
 
-  // 筒子（ピンズ）
-  ONE_P @alias("1p")
-  TWO_P @alias("2p")
-  THREE_P @alias("3p")
-  FOUR_P @alias("4p")
-  FIVE_P @alias("5p")
-  SIX_P @alias("6p")
-  SEVEN_P @alias("7p")
-  EIGHT_P @alias("8p")
-  NINE_P @alias("9p")
-
-  // 索子（ソーズ）
-  ONE_S @alias("1s")
-  TWO_S @alias("2s")
-  THREE_S @alias("3s")
-  FOUR_S @alias("4s")
-  FIVE_S @alias("5s")
-  SIX_S @alias("6s")
-  SEVEN_S @alias("7s")
-  EIGHT_S @alias("8s")
-  NINE_S @alias("9s")
-
-  // 字牌
-  EAST @alias("1z")   // 東
-  SOUTH @alias("2z")  // 南
-  WEST @alias("3z")   // 西
-  NORTH @alias("4z")  // 北
-  WHITE @alias("5z")  // 白
-  GREEN @alias("6z")  // 発
-  RED @alias("7z")    // 中
-}
-
-// 風牌の種類
-enum WindType {
-  EAST @alias("east")
-  SOUTH @alias("south")
-  WEST @alias("west")
-  NORTH @alias("north")
-}
+// 風の種類を文字列型で定義
+// aliasが効かないため、直接文字列として定義する
+// 有効な値: "east", "south", "west", "north"
+type WindType = string
 
 // 鳴き(メンツ)の情報
 class MeldInfo {
@@ -88,9 +45,8 @@ class Hand {
   is_open_riichi bool @description("オープンリーチか")
   player_wind WindType | null @description("自風: 'east'(東家), 'south'(南家), 'west'(西家), 'north'(北家)")
   round_wind WindType | null @description("場風: 'east'(東場), 'south'(南場), 'west'(西場), 'north'(北場)")
-  paarenchan int @description("本場数")
-  kyoutaku_number int @description("供託本数")
-  tsumi_number int @description("積み棒の数")
+  kyoutaku_number int @description("供託本数（1000点単位）")
+  tsumi_number int @description("積み棒の数（100点単位）。本場数×3で計算（例: 2本場なら6）")
 }
 
 // OpenAI GPTクライアント設定
@@ -112,14 +68,23 @@ function ParseHandFromJSON(json_string: string) -> Hand {
     入力JSON:
     {{ json_string }}
 
+    重要: 牌の表記は必ず小文字の形式（"1m", "2p", "3s", "1z"）で出力してください。
+    大文字形式（"ONE_M", "TWO_P"など）が入力に含まれていた場合は、必ず小文字形式に変換してください。
+    変換例:
+    - "ONE_M" → "1m", "TWO_M" → "2m", "FIVE_P" → "5p"
+    - "EAST" → "1z" (東の牌), "SOUTH" → "2z" (南の牌), "WEST" → "3z" (西の牌), "NORTH" → "4z" (北の牌)
+    - "WHITE" → "5z" (白), "GREEN" → "6z" (発), "RED" → "7z" (中)
+
+    注意: player_windやround_windは "east", "south", "west", "north" のままで問題ありません。
+
     出力に含める必須フィールド:
-    - tiles: 牌の配列。和了牌(win_tile)を含む14枚。
+    - tiles: 牌の配列。和了牌(win_tile)を含む14枚。形式: "1m", "2p", "3s", "1z"
     - melds: nullまたはMeldInfoの配列
-    - win_tile: アガリ牌。tilesの中にも必ず含まれている必要がある。
-    - dora_indicators: nullまたはドラ表示牌の配列
+    - win_tile: アガリ牌。tilesの中にも必ず含まれている必要がある。形式: "1m", "2p"など
+    - dora_indicators: nullまたはドラ表示牌の配列。形式: "1m", "2p"など
     - is_riichi, is_tsumo, is_ippatsu, is_rinshan, is_chankan, is_haitei, is_houtei, is_daburu_riichi, is_nagashi_mangan, is_tenhou, is_chiihou, is_renhou, is_open_riichi: boolean型 (デフォルト: false)
     - player_wind, round_wind: nullまたは文字列 (east/south/west/north)
-    - paarenchan, kyoutaku_number, tsumi_number: 整数 (デフォルト: 0)
+    - kyoutaku_number, tsumi_number: 整数 (デフォルト: 0)
 
     重要: win_tileはtilesの中に必ず存在する必要があります。
 
@@ -138,12 +103,15 @@ function ExtractHandFromQuestion(question: string) -> Hand {
     問題文:
     {{ question }}
 
+    重要: 牌の表記は必ず小文字の形式（例: "1m", "2p", "3s", "1z"）を使用してください。
+    大文字の形式（例: "ONE_M", "TWO_P"）は使用しないでください。
+
     出力形式(全てのフィールドを含めること):
     {
-      "tiles": [...],  // 問題文から抽出した手牌。和了牌を含む14枚。鳴いた牌は含めない。
+      "tiles": [...],  // 問題文から抽出した手牌。和了牌を含む14枚以上。鳴いた牌は含めない。形式: "1m", "2p", "3s", "1z"
       "melds": null,  // 鳴き情報。ポン/チー/カンがある場合は配列で設定
-      "win_tile": "...",  // アガリ牌。tilesの中にも必ず含まれている必要がある。
-      "dora_indicators": null,  // ドラ表示牌がある場合は配列で設定
+      "win_tile": "...",  // アガリ牌。tilesの中にも必ず含まれている必要がある。形式: "1m"など
+      "dora_indicators": null,  // ドラ表示牌がある場合は配列で設定。形式: "1m"など
       "is_riichi": false,  // リーチが言及されていればtrue
       "is_tsumo": false,  // ツモ/自摸ならtrue、ロンならfalse
       "is_ippatsu": false,  // 一発が言及されていない限りfalse
@@ -159,9 +127,8 @@ function ExtractHandFromQuestion(question: string) -> Hand {
       "is_open_riichi": false,  // オープンリーチが言及されていない限りfalse
       "player_wind": null,  // 東家なら"east", 南家なら"south", 西家なら"west", 北家なら"north"
       "round_wind": null,  // 東場なら"east", 南場なら"south", 西場なら"west", 北場なら"north"
-      "paarenchan": 0,  // "X本場"から抽出
-      "kyoutaku_number": 0,  // 供託本数(言及されていない限り0)
-      "tsumi_number": 0  // 積み棒の数(言及されていない限り0)
+      "kyoutaku_number": 0,  // 供託本数（1000点単位）。言及されていない限り0
+      "tsumi_number": 0  // 積み棒の数（100点単位）。"X本場"なら本場数×3で計算（例: 2本場なら6）。言及されていない限り0
     }
 
     tilesとwin_tileの関係について重要な注意事項:

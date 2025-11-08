@@ -46,7 +46,6 @@ class Hand(BaseModel):
     is_open_riichi: typing.Optional[bool] = None
     player_wind: typing.Optional[str] = None
     round_wind: typing.Optional[str] = None
-    paarenchan: typing.Optional[int] = None
     kyoutaku_number: typing.Optional[int] = None
     tsumi_number: typing.Optional[int] = None
 
@@ -55,5 +54,11 @@ class MeldInfo(BaseModel):
     is_open: typing.Optional[bool] = None
 
 # #########################################################################
-# Generated type aliases (0)
+# Generated type aliases (2)
 # #########################################################################
+
+
+TileType: typing_extensions.TypeAlias = typing.Optional[str]
+
+
+WindType: typing_extensions.TypeAlias = typing.Optional[str]

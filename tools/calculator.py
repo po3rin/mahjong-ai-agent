@@ -14,6 +14,27 @@ from tools.exceptions import HandValidationError, ScoreCalculationError
 logger = logging.getLogger(__name__)
 
 
+def convert_wind_to_constant(wind: str) -> int:
+    """
+    風の文字列表現を定数に変換する
+
+    Args:
+        wind: 風の文字列 ("east", "south", "west", "north")
+
+    Returns:
+        int: 風の定数 (0=東, 1=南, 2=西, 3=北)
+    """
+    wind_map = {
+        "east": 0,
+        "south": 1,
+        "west": 2,
+        "north": 3,
+    }
+    if wind not in wind_map:
+        raise ValueError(f"Invalid wind value: {wind}")
+    return wind_map[wind]
+
+
 def convert_tiles_to_136_array(tiles: List[str]) -> List[int]:
     """
     牌の表記を136形式の配列に変換する
@@ -131,6 +152,10 @@ def calculate_score(hand: Hand) -> ScoreResponse:
         logger.debug(f"Converted dora indicators: {dora_indicators}")
 
         # 設定を準備
+        # player_windとround_windを文字列から整数に変換
+        player_wind_int = convert_wind_to_constant(hand.player_wind) if hand.player_wind else None
+        round_wind_int = convert_wind_to_constant(hand.round_wind) if hand.round_wind else None
+
         config = HandConfig(
             is_riichi=hand.is_riichi,
             is_tsumo=hand.is_tsumo,
@@ -144,9 +169,8 @@ def calculate_score(hand: Hand) -> ScoreResponse:
             is_tenhou=hand.is_tenhou,
             is_chiihou=hand.is_chiihou,
             is_open_riichi=hand.is_open_riichi,
-            player_wind=hand.player_wind,
-            round_wind=hand.round_wind,
-            paarenchan=hand.paarenchan,
+            player_wind=player_wind_int,
+            round_wind=round_wind_int,
             kyoutaku_number=hand.kyoutaku_number,
             tsumi_number=hand.tsumi_number,
         )
@@ -188,7 +212,7 @@ def calculate_score(hand: Hand) -> ScoreResponse:
 
     except Exception as e:
         logger.error(
-            f"Error during score calculation: {str(e)}, result: {result if result else 'None'}",
+            f"Error during score calculation: {str(e)}",
             exc_info=True,
         )
         raise ScoreCalculationError(f"Error during score calculation: {str(e)}") from e

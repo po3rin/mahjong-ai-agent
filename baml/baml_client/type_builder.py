@@ -22,20 +22,12 @@ class TypeBuilder(type_builder.TypeBuilder):
         super().__init__(classes=set(
           ["Hand","MeldInfo",]
         ), enums=set(
-          ["TileType","WindType",]
+          []
         ), runtime=DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIME)
 
     # #########################################################################
-    # Generated enums 2
+    # Generated enums 0
     # #########################################################################
-
-    @property
-    def TileType(self) -> "TileTypeViewer":
-        return TileTypeViewer(self)
-
-    @property
-    def WindType(self) -> "WindTypeViewer":
-        return WindTypeViewer(self)
 
 
     # #########################################################################
@@ -53,228 +45,8 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
 # #########################################################################
-# Generated enums 2
+# Generated enums 0
 # #########################################################################
-
-class TileTypeAst:
-    def __init__(self, tb: type_builder.TypeBuilder):
-        _tb = tb._tb # type: ignore (we know how to use this private attribute)
-        self._bldr = _tb.enum("TileType")
-        self._values: typing.Set[str] = set([  "ONE_M",  "TWO_M",  "THREE_M",  "FOUR_M",  "FIVE_M",  "SIX_M",  "SEVEN_M",  "EIGHT_M",  "NINE_M",  "ONE_P",  "TWO_P",  "THREE_P",  "FOUR_P",  "FIVE_P",  "SIX_P",  "SEVEN_P",  "EIGHT_P",  "NINE_P",  "ONE_S",  "TWO_S",  "THREE_S",  "FOUR_S",  "FIVE_S",  "SIX_S",  "SEVEN_S",  "EIGHT_S",  "NINE_S",  "EAST",  "SOUTH",  "WEST",  "NORTH",  "WHITE",  "GREEN",  "RED",  ])
-        self._vals = TileTypeValues(self._bldr, self._values)
-
-    def type(self) -> baml_py.FieldType:
-        return self._bldr.field()
-
-    @property
-    def values(self) -> "TileTypeValues":
-        return self._vals
-
-
-class TileTypeViewer(TileTypeAst):
-    def __init__(self, tb: type_builder.TypeBuilder):
-        super().__init__(tb)
-
-    
-    def list_values(self) -> typing.List[typing.Tuple[str, type_builder.EnumValueViewer]]:
-        return [(name, type_builder.EnumValueViewer(self._bldr.value(name))) for name in self._values]
-    
-
-class TileTypeValues:
-    def __init__(self, enum_bldr: baml_py.EnumBuilder, values: typing.Set[str]):
-        self.__bldr = enum_bldr
-        self.__values = values # type: ignore (we know how to use this private attribute) # noqa: F821
-
-    
-    
-    @property
-    def ONE_M(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("ONE_M"))
-    
-    @property
-    def TWO_M(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("TWO_M"))
-    
-    @property
-    def THREE_M(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("THREE_M"))
-    
-    @property
-    def FOUR_M(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("FOUR_M"))
-    
-    @property
-    def FIVE_M(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("FIVE_M"))
-    
-    @property
-    def SIX_M(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("SIX_M"))
-    
-    @property
-    def SEVEN_M(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("SEVEN_M"))
-    
-    @property
-    def EIGHT_M(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("EIGHT_M"))
-    
-    @property
-    def NINE_M(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("NINE_M"))
-    
-    @property
-    def ONE_P(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("ONE_P"))
-    
-    @property
-    def TWO_P(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("TWO_P"))
-    
-    @property
-    def THREE_P(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("THREE_P"))
-    
-    @property
-    def FOUR_P(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("FOUR_P"))
-    
-    @property
-    def FIVE_P(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("FIVE_P"))
-    
-    @property
-    def SIX_P(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("SIX_P"))
-    
-    @property
-    def SEVEN_P(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("SEVEN_P"))
-    
-    @property
-    def EIGHT_P(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("EIGHT_P"))
-    
-    @property
-    def NINE_P(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("NINE_P"))
-    
-    @property
-    def ONE_S(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("ONE_S"))
-    
-    @property
-    def TWO_S(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("TWO_S"))
-    
-    @property
-    def THREE_S(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("THREE_S"))
-    
-    @property
-    def FOUR_S(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("FOUR_S"))
-    
-    @property
-    def FIVE_S(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("FIVE_S"))
-    
-    @property
-    def SIX_S(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("SIX_S"))
-    
-    @property
-    def SEVEN_S(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("SEVEN_S"))
-    
-    @property
-    def EIGHT_S(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("EIGHT_S"))
-    
-    @property
-    def NINE_S(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("NINE_S"))
-    
-    @property
-    def EAST(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("EAST"))
-    
-    @property
-    def SOUTH(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("SOUTH"))
-    
-    @property
-    def WEST(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("WEST"))
-    
-    @property
-    def NORTH(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("NORTH"))
-    
-    @property
-    def WHITE(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("WHITE"))
-    
-    @property
-    def GREEN(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("GREEN"))
-    
-    @property
-    def RED(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("RED"))
-    
-    
-
-
-class WindTypeAst:
-    def __init__(self, tb: type_builder.TypeBuilder):
-        _tb = tb._tb # type: ignore (we know how to use this private attribute)
-        self._bldr = _tb.enum("WindType")
-        self._values: typing.Set[str] = set([  "EAST",  "SOUTH",  "WEST",  "NORTH",  ])
-        self._vals = WindTypeValues(self._bldr, self._values)
-
-    def type(self) -> baml_py.FieldType:
-        return self._bldr.field()
-
-    @property
-    def values(self) -> "WindTypeValues":
-        return self._vals
-
-
-class WindTypeViewer(WindTypeAst):
-    def __init__(self, tb: type_builder.TypeBuilder):
-        super().__init__(tb)
-
-    
-    def list_values(self) -> typing.List[typing.Tuple[str, type_builder.EnumValueViewer]]:
-        return [(name, type_builder.EnumValueViewer(self._bldr.value(name))) for name in self._values]
-    
-
-class WindTypeValues:
-    def __init__(self, enum_bldr: baml_py.EnumBuilder, values: typing.Set[str]):
-        self.__bldr = enum_bldr
-        self.__values = values # type: ignore (we know how to use this private attribute) # noqa: F821
-
-    
-    
-    @property
-    def EAST(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("EAST"))
-    
-    @property
-    def SOUTH(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("SOUTH"))
-    
-    @property
-    def WEST(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("WEST"))
-    
-    @property
-    def NORTH(self) -> type_builder.EnumValueViewer:
-        return type_builder.EnumValueViewer(self.__bldr.value("NORTH"))
-    
-    
-
 
 
 # #########################################################################
@@ -285,7 +57,7 @@ class HandAst:
     def __init__(self, tb: type_builder.TypeBuilder):
         _tb = tb._tb # type: ignore (we know how to use this private attribute)
         self._bldr = _tb.class_("Hand")
-        self._properties: typing.Set[str] = set([  "tiles",  "melds",  "win_tile",  "dora_indicators",  "is_riichi",  "is_tsumo",  "is_ippatsu",  "is_rinshan",  "is_chankan",  "is_haitei",  "is_houtei",  "is_daburu_riichi",  "is_nagashi_mangan",  "is_tenhou",  "is_chiihou",  "is_renhou",  "is_open_riichi",  "player_wind",  "round_wind",  "paarenchan",  "kyoutaku_number",  "tsumi_number",  ])
+        self._properties: typing.Set[str] = set([  "tiles",  "melds",  "win_tile",  "dora_indicators",  "is_riichi",  "is_tsumo",  "is_ippatsu",  "is_rinshan",  "is_chankan",  "is_haitei",  "is_houtei",  "is_daburu_riichi",  "is_nagashi_mangan",  "is_tenhou",  "is_chiihou",  "is_renhou",  "is_open_riichi",  "player_wind",  "round_wind",  "kyoutaku_number",  "tsumi_number",  ])
         self._props = HandProperties(self._bldr, self._properties)
 
     def type(self) -> baml_py.FieldType:
@@ -388,10 +160,6 @@ class HandProperties:
     @property
     def round_wind(self) -> type_builder.ClassPropertyViewer:
         return type_builder.ClassPropertyViewer(self.__bldr.property("round_wind"))
-    
-    @property
-    def paarenchan(self) -> type_builder.ClassPropertyViewer:
-        return type_builder.ClassPropertyViewer(self.__bldr.property("paarenchan"))
     
     @property
     def kyoutaku_number(self) -> type_builder.ClassPropertyViewer:

@@ -211,9 +211,17 @@ def generate_command(args):
         ]
     }
 
-    # 検証結果も含める
-    for i, val_result in enumerate(validation_results):
+    # 検証結果と点数計算結果も含める
+    for i, (val_result, details) in enumerate(zip(validation_results, validation_details)):
         output_data["questions"][i]["validation"] = val_result
+        # 点数計算ツールの結果を追加
+        output_data["questions"][i]["calculator_result"] = {
+            "score": details.get('score'),
+            "han": details.get('han'),
+            "fu": details.get('fu'),
+            "yaku": details.get('yaku', []),
+            "error": details.get('error')
+        }
 
     # 出力パスの決定
     if args.output:
