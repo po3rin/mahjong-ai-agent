@@ -223,6 +223,12 @@ class QuestionVerifier:
         """
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+        yaku_list = verification_details.get('yaku', [])
+        logger.info(f"Checking compliance for instruction: {instruction}")
+        logger.info(f"Yaku list: {yaku_list}")
+        logger.info(f"Yaku list type: {type(yaku_list)}")
+        logger.info(f"Yaku list repr: {repr(yaku_list)}")
+
         prompt = f"""生成された麻雀問題が指示に従っているかを評価してください。
 
 指示: {instruction}
@@ -231,19 +237,58 @@ class QuestionVerifier:
 - 計算された点数: {verification_details.get('score', 'N/A')}
 - 翻数: {verification_details.get('han', 'N/A')}
 - 符数: {verification_details.get('fu', 'N/A')}
-- 役: {verification_details.get('yaku', [])}
+- 役: {yaku_list}
+
+**重要: 役名の日本語・英語対応表**
+- Toitoi = 対々和
+- Tanyao = タンヤオ/断么九
+- Pinfu = ピンフ/平和
+- Iipeiko = イーペーコー/一盃口
+- Ryanpeikou = リャンペーコー/二盃口
+- Sanshoku = 三色同順
+- Sanshoku Dokou = 三色同刻
+- Ittsu = イッツー/一気通貫
+- Chiitoitsu = チートイツ/七対子
+- Honitsu = ホンイツ/混一色
+- Chinitsu = チンイツ/清一色
+- Honroutou = 混老頭
+- Chanta = チャンタ/混全帯么九
+- Junchan = ジュンチャン/純全帯么九
+- Yakuhai = 役牌 (haku=白, hatsu=発, chun=中, wind of place=自風, wind of round=場風)
+- Sanankou = サンアンコー/三暗刻
+- Sankantsu = サンカンツ/三槓子
+- Shousangen = ショウサンゲン/小三元
+- Dora = ドラ
+- Riichi = リーチ/立直
+- Ippatsu = イッパツ/一発
+- Rinshan kaihou = リンシャンカイホー/嶺上開花
+- Chankan = チャンカン/槍槓
+- Haitei raoyue = ハイテイ/海底摸月
+- Houtei raoyui = ホウテイ/河底撈魚
+- Double riichi = ダブルリーチ/ダブル立直
+- Tenhou = 天和
+- Chiihou = 地和
 
 判定基準:
 指示に明記されている条件のみをチェックしてください。指示に含まれていない条件（点数、翻数、符数など）は判定に含めないでください。
 
 例：
 - 指示が「難易度hardで、暗刻が三つある問題を作成してください」の場合
-  → 難易度がhardであること、暗刻が三つあること（役リストに三暗刻があるか）のみをチェック
+  → 難易度がhardであること、暗刻が三つあること（役リストに「Sanankou」があるか）のみをチェック
   → 点数や翻数、符数は指示に含まれていないため無視する
 
 - 指示が「タンヤオと三色同順で5200点の問題を作成してください」の場合
-  → 役リストにタンヤオと三色同順が含まれているか、点数が5200点であることをチェック
+  → 役リストに「Tanyao」と「Sanshoku」が含まれているか、点数が5200点であることをチェック
   → 翻数や符数は指示に含まれていないため無視する
+
+- 指示が「対々和の問題を作成してください」の場合
+  → 役リストに「Toitoi」という文字列が含まれているかをチェック
+  → 点数や翻数、符数は指示に含まれていないため無視する
+
+**重要な注意事項:**
+- 役リストは配列形式で渡されます（例: ['Yakuhai (haku)', 'Toitoi', 'Dora']）
+- 配列の要素を一つずつ確認して、指定された役が含まれているか判定してください
+- 大文字小文字を区別せずに判定してください
 
 指示に明記されている全ての条件が満たされている場合のみ「Yes」、一つでも満たされていない場合は「No」と回答してください。
 理由も簡潔に説明してください。
@@ -251,13 +296,17 @@ class QuestionVerifier:
 回答形式: Yes/No
 理由: （簡潔な説明）"""
 
+        logger.info(f"Prompt being sent to LLM:\n{prompt}")
+
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",  # より高性能なモデルに変更
             messages=[
                 {"role": "user", "content": prompt}
             ],
             temperature=0.0
         )
+
+        logger.info(f"LLM response: {response.choices[0].message.content}")
 
         return response.choices[0].message.content
 

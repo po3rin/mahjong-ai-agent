@@ -53,17 +53,17 @@ class Hand {
 }
 
 // OpenAI GPTクライアント設定
-client<llm> GPT4oMini {
+client<llm> GPT4o {
   provider openai
   options {
-    model "gpt-4o-mini"
+    model "gpt-4o"
     api_key env.OPENAI_API_KEY
   }
 }
 
 // 自然言語の問題文から手牌データを構造化抽出する関数
 function ExtractHandFromQuestion(question: string) -> Hand {
-  client GPT4oMini
+  client GPT4o
   prompt #"
     以下の日本語の麻雀問題文から手牌情報を抽出し、完全なJSONオブジェクトとして出力してください。
 

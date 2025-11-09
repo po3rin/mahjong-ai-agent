@@ -131,13 +131,18 @@ def generate_command(args):
             print()
 
         # 詳細な検証結果を表示
+        # 役は常に表示する（指示適合性判定のため）
+        if details.get('yaku'):
+            print(f"  役: {', '.join(details.get('yaku', []))}")
+            print()
+
+        # その他の詳細情報はverboseまたはエラー時のみ表示
         if args.verbose or result != 1:
             # エラーでない場合、または詳細情報がある場合のみ表示
             has_details = (details.get('score') is not None or
                           details.get('expected_score') is not None or
                           details.get('han') is not None or
-                          details.get('fu') is not None or
-                          details.get('yaku'))
+                          details.get('fu') is not None)
 
             if has_details:
                 if result != 1:
@@ -155,8 +160,6 @@ def generate_command(args):
                     print(f"  翻数: {details.get('han')}")
                 if details.get('fu') is not None:
                     print(f"  符: {details.get('fu')}")
-                if details.get('yaku'):
-                    print(f"  役: {', '.join(details.get('yaku', []))}")
                 print()
 
     # ファイルに保存
