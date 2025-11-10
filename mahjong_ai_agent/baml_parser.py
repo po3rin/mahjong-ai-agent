@@ -31,14 +31,9 @@ async def parse_hand_with_baml(hand_json: str) -> Hand:
         Exception: パースに失敗した場合
     """
     try:
-        logger.info("Parsing hand JSON directly...")
-
         # 直接JSONパース（BAMLを使わない）
         hand_data = json.loads(hand_json)
-        hand = Hand(**hand_data)
-
-        logger.info("Successfully parsed hand JSON")
-        return hand
+        return Hand(**hand_data)
 
     except Exception as e:
         logger.error(f"JSON parsing failed: {str(e)}")
@@ -63,14 +58,9 @@ def parse_hand_with_baml_sync(hand_json: str) -> Hand:
         Exception: パースに失敗した場合
     """
     try:
-        logger.info("Parsing hand JSON directly (sync)...")
-
         # 直接JSONパース（BAMLを使わない）
         hand_data = json.loads(hand_json)
-        hand = Hand(**hand_data)
-
-        logger.info("Successfully parsed hand JSON (sync)")
-        return hand
+        return Hand(**hand_data)
 
     except Exception as e:
         logger.error(f"JSON parsing failed: {str(e)}")
@@ -91,21 +81,19 @@ async def extract_hand_from_question(question: str) -> Hand:
         Exception: 抽出に失敗した場合
     """
     try:
-        logger.info("Extracting hand from question with BAML...")
-
         # BAMLで問題文から構造化データを抽出（非同期版）
         hand = await async_b.ExtractHandFromQuestion(question)
 
         # 修正: カンがない場合に15枚以上の場合、win_tileが重複している可能性があるので修正
         has_kan = hand.melds and any(len(meld.tiles) == 4 for meld in hand.melds)
-        if not has_kan and len(hand.tiles) > 14:
-            # 最後の牌がwin_tileと一致する場合、重複なので削除
-            if hand.tiles[-1] == hand.win_tile:
-                logger.warning(f"Detected duplicate win_tile at end of tiles. Removing last tile. Before: {len(hand.tiles)} tiles")
-                hand.tiles = hand.tiles[:-1]
-                logger.warning(f"After: {len(hand.tiles)} tiles")
+        if (
+            not has_kan
+            and len(hand.tiles) > 14
+            and hand.tiles[-1] == hand.win_tile
+        ):
+            logger.warning(f"Detected duplicate win_tile at end of tiles. Removing last tile. Before: {len(hand.tiles)} tiles")
+            hand.tiles = hand.tiles[:-1]
 
-        logger.info("Successfully extracted hand from question with BAML")
         return hand
 
     except Exception as e:

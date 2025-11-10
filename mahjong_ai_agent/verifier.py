@@ -6,7 +6,7 @@ from typing import Optional
 
 from openai import OpenAI
 
-from mahjong_ai_agent.baml_parser import parse_hand_with_baml
+from mahjong_ai_agent.baml_parser import parse_hand_with_baml, extract_hand_from_question
 from tools.calculator import calculate_score, validate_hand
 from baml.baml_client.types import Hand
 from tools.exceptions import HandValidationError, ScoreCalculationError
@@ -61,16 +61,12 @@ class QuestionVerifier:
                 return 0
 
             # 期待される点数が指定されている場合、一致するかチェック
-            if expected_score is not None:
-                if result.score != expected_score:
-                    logger.warning(
-                        f"Score mismatch: expected {expected_score}, got {result.score}"
-                    )
-                    return 0
+            if expected_score is not None and result.score != expected_score:
+                logger.warning(
+                    f"Score mismatch: expected {expected_score}, got {result.score}"
+                )
+                return 0
 
-            logger.info(
-                f"Verification successful: han={result.han}, fu={result.fu}, score={result.score}"
-            )
             return 1
 
         except HandValidationError as e:
@@ -205,7 +201,168 @@ class QuestionVerifier:
             else:
                 processed_results.append(result)
 
-        logger.info(f"Verified {len(hand_jsons)} questions in parallel")
+        return processed_results
+
+    async def verify_from_question(
+        self, question: str, instruction: Optional[str] = None, expected_score: Optional[int] = None
+    ) -> dict:
+        """
+        問題文から検証まで一貫して処理する（BAML→Python→LLM-as-a-Judge）
+        
+        Args:
+            question: 問題文（自然言語）
+            instruction: 問題生成時の指示（LLM-as-a-Judgeで使用）
+            expected_score: 期待される点数（オプション）
+        
+        Returns:
+            dict: 検証結果の詳細
+                - baml_extracted: BAML抽出が成功したか (bool)
+                - baml_error: BAML抽出エラー（失敗時）
+                - calculation_success: 点数計算が成功したか (bool)
+                - calculation_error: 点数計算エラー（失敗時）
+                - compliance_judged: LLM-as-a-Judgeが実行されたか (bool)
+                - compliance_result: LLM-as-a-Judgeの結果（実行時）
+                - is_verified: 正しいかどうか (1 or 0)
+                - han: 翻数
+                - fu: 符
+                - score: 点数
+                - yaku: 役のリスト
+                - error: エラーメッセージ（エラーがある場合）
+        """
+        result = {
+            'baml_extracted': False,
+            'calculation_success': False,
+            'compliance_judged': False,
+            'is_verified': 0
+        }
+        
+        # Step 1: BAML - 問題文からHand型を抽出
+        try:
+            hand = await extract_hand_from_question(question)
+            if hand is None:
+                result['baml_extracted'] = False
+                result['baml_error'] = 'Hand extraction returned None'
+                return result
+            
+            result['baml_extracted'] = True
+            hand_json = hand.model_dump_json()
+            result['hand_json'] = hand_json  # hand_jsonを結果に含める
+        except Exception as e:
+            result['baml_extracted'] = False
+            result['baml_error'] = str(e)
+            return result
+        
+        # Step 2: Python - 点数計算、役の特定、飜数、符数の計算
+        try:
+            # BAMLでJSONをパース
+            if self.use_baml:
+                hand_obj = await parse_hand_with_baml(hand_json)
+            else:
+                hand_data = json.loads(hand_json)
+                hand_obj = Hand(**hand_data)
+            
+            # 手牌の検証
+            validate_hand(hand_obj)
+            
+            # 点数計算
+            calc_result = calculate_score(hand_obj)
+            
+            if calc_result.error:
+                result['calculation_success'] = False
+                result['calculation_error'] = calc_result.error
+                return result
+            
+            result['calculation_success'] = True
+            result['han'] = calc_result.han
+            result['fu'] = calc_result.fu
+            result['score'] = calc_result.score
+            result['yaku'] = calc_result.yaku
+            
+            # 期待される点数が指定されている場合、一致するかチェック
+            if expected_score is not None and calc_result.score != expected_score:
+                result['is_verified'] = 0
+                result['error'] = f"Score mismatch: expected {expected_score}, got {calc_result.score}"
+            else:
+                result['is_verified'] = 1
+                
+        except (HandValidationError, ScoreCalculationError, json.JSONDecodeError) as e:
+            result['calculation_success'] = False
+            result['calculation_error'] = str(e)
+            return result
+        except Exception as e:
+            result['calculation_success'] = False
+            result['calculation_error'] = f"Unexpected error: {str(e)}"
+            return result
+        
+        # Step 3: LLM-as-a-Judge - 指示適合性を判定
+        if instruction and result['calculation_success']:
+            try:
+                verification_details = {
+                    'han': result.get('han'),
+                    'fu': result.get('fu'),
+                    'score': result.get('score'),
+                    'yaku': result.get('yaku', [])
+                }
+                compliance_result = await self.judge_instruction_compliance(instruction, verification_details)
+                result['compliance_judged'] = True
+                result['compliance_result'] = compliance_result
+            except Exception as e:
+                result['compliance_judged'] = False
+                result['compliance_error'] = str(e)
+        
+        return result
+
+    async def verify_batch_from_questions(
+        self, questions: list[str], instructions: Optional[list[Optional[str]]] = None,
+        expected_scores: Optional[list[Optional[int]]] = None
+    ) -> list[dict]:
+        """
+        複数の問題文を並列で検証する（BAML→Python→LLM-as-a-Judge）
+        
+        Args:
+            questions: 問題文のリスト
+            instructions: 問題生成時の指示のリスト（オプション）
+            expected_scores: 期待される点数のリスト（オプション）
+        
+        Returns:
+            list[dict]: 検証結果の詳細のリスト
+        """
+        if instructions is None:
+            instructions = [None] * len(questions)
+        if expected_scores is None:
+            expected_scores = [None] * len(questions)
+        
+        if len(questions) != len(instructions) or len(questions) != len(expected_scores):
+            raise ValueError("questions, instructions, and expected_scores must have the same length")
+        
+        # 1つのみの場合は並列化不要
+        if len(questions) == 1:
+            result = await self.verify_from_question(questions[0], instructions[0], expected_scores[0])
+            return [result]
+
+        # 非同期タスクを並列実行
+        tasks = [
+            self.verify_from_question(question, instruction, expected_score)
+            for question, instruction, expected_score in zip(questions, instructions, expected_scores)
+        ]
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 例外をエラー辞書に変換
+        processed_results = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Error verifying question at index {i}: {str(result)}", exc_info=result)
+                processed_results.append({
+                    "baml_extracted": False,
+                    "baml_error": f"Exception: {str(result)}",
+                    "calculation_success": False,
+                    "compliance_judged": False,
+                    "is_verified": 0,
+                })
+            else:
+                processed_results.append(result)
+
         return processed_results
 
     async def judge_instruction_compliance(
@@ -224,11 +381,6 @@ class QuestionVerifier:
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
         yaku_list = verification_details.get('yaku', [])
-        logger.info(f"Checking compliance for instruction: {instruction}")
-        logger.info(f"Yaku list: {yaku_list}")
-        logger.info(f"Yaku list type: {type(yaku_list)}")
-        logger.info(f"Yaku list repr: {repr(yaku_list)}")
-
         prompt = f"""生成された麻雀問題が指示に従っているかを評価してください。
 
 指示: {instruction}
@@ -293,10 +445,19 @@ class QuestionVerifier:
 指示に明記されている全ての条件が満たされている場合のみ「Yes」、一つでも満たされていない場合は「No」と回答してください。
 理由も簡潔に説明してください。
 
-回答形式: Yes/No
-理由: （簡潔な説明）"""
+**重要: 回答形式を厳密に守ってください**
+回答は必ず以下の形式で出力してください。最初の行には「Yes」または「No」という単語のみを出力してください（「回答形式:」などのプレフィックスは不要です）。2行目以降に理由を記載してください。
 
-        logger.info(f"Prompt being sent to LLM:\n{prompt}")
+回答形式:
+Yes
+理由: （簡潔な説明）
+
+または
+
+No
+理由: （簡潔な説明）
+
+**注意: 最初の行には「Yes」または「No」という単語のみを出力してください。他の文字列（「回答形式:」など）は含めないでください。**"""
 
         response = client.chat.completions.create(
             model="gpt-4o",  # より高性能なモデルに変更
@@ -306,9 +467,61 @@ class QuestionVerifier:
             temperature=0.0
         )
 
-        logger.info(f"LLM response: {response.choices[0].message.content}")
+        raw_response = response.choices[0].message.content.strip()
 
-        return response.choices[0].message.content
+        # レスポンスをパースして、最初の行から「Yes」または「No」を正確に抽出
+        lines = [line.strip() for line in raw_response.split('\n') if line.strip()]
+        first_line = lines[0] if lines else ""
+
+        # 最初の行から「Yes」または「No」を抽出
+        # プレフィックス（「回答形式:」「回答形式」など）を除去
+        first_line_clean = first_line
+        for prefix in ['回答形式:', '回答形式', '回答:', '回答']:
+            if first_line_clean.startswith(prefix):
+                first_line_clean = first_line_clean[len(prefix):].strip()
+                break
+
+        # 「Yes」または「No」を抽出（大文字小文字を区別しない）
+        first_line_upper = first_line_clean.upper()
+        if first_line_upper.startswith('YES'):
+            status = "Yes"
+        elif first_line_upper.startswith('NO'):
+            status = "No"
+        else:
+            # 最初の行に「Yes」または「No」がない場合、レスポンス全体から検索
+            response_upper = raw_response.upper()
+            # プレフィックスを除去
+            response_clean = raw_response
+            for prefix in ['回答形式:', '回答形式', '回答:', '回答']:
+                response_clean = response_clean.replace(prefix, '').strip()
+
+            response_clean_upper = response_clean.upper()
+            # 「Yes」と「No」の最初の出現位置を確認
+            yes_pos = response_clean_upper.find("YES")
+            no_pos = response_clean_upper.find("NO")
+
+            if yes_pos != -1 and (no_pos == -1 or yes_pos < no_pos):
+                status = "Yes"
+            elif no_pos != -1:
+                status = "No"
+            else:
+                # どちらも見つからない場合は、最初の行をそのまま使用（フォールバック）
+                status = first_line_clean or "Unknown"
+
+        reason = next(
+            (
+                line.split(':', 1)[-1].strip() if ':' in line else line.strip()
+                for line in lines[1:]
+                if '理由' in line or 'reason' in line.lower()
+            ),
+            "",
+        )
+        # 理由が見つからない場合は、2行目以降をすべて理由として使用
+        if not reason and len(lines) > 1:
+            reason = '\n'.join(lines[1:]).strip()
+
+        # フォーマットされたレスポンスを返す
+        return f"{status}\n理由: {reason}" if reason else status
 
 
 if __name__ == "__main__":

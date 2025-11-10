@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 from openai import OpenAI, AsyncOpenAI
 from pydantic import BaseModel
 
-from mahjong_ai_agent.baml_parser import extract_hand_from_question
 from baml.baml_client.types import Hand
 
 logger = logging.getLogger(__name__)
@@ -152,7 +151,6 @@ class QuestionGenerator:
             from langfuse.openai import openai
             self.client = openai.OpenAI(api_key=self.api_key)
             self.async_client = openai.AsyncOpenAI(api_key=self.api_key)
-            logger.info("Langfuse tracing enabled")
         else:
             self.client = OpenAI(api_key=self.api_key)
             self.async_client = AsyncOpenAI(api_key=self.api_key)
@@ -200,8 +198,6 @@ class QuestionGenerator:
             list[MahjongQuestion]: 生成された問題のリスト
         """
         try:
-            logger.info(f"Generating {num_questions} questions in parallel...")
-
             # 指示を準備
             instructions = []
             for i in range(num_questions):
@@ -226,25 +222,7 @@ class QuestionGenerator:
                 else:
                     questions.append(MahjongQuestion(question=result))
 
-            # BAMLで並列抽出
-            valid_questions = [q for q in questions if q.generation_error is None]
-            if valid_questions:
-                logger.info(f"Extracting {len(valid_questions)} hands from questions with BAML in parallel...")
-                extract_tasks = [
-                    extract_hand_from_question(q.question) for q in valid_questions
-                ]
-                extracted_hands = await asyncio.gather(*extract_tasks, return_exceptions=True)
-
-                for question, hand in zip(valid_questions, extracted_hands):
-                    if isinstance(hand, Exception):
-                        logger.error(f"Failed to extract hand: {hand}")
-                        question.generation_error = f"Hand extraction failed: {str(hand)}"
-                    else:
-                        question.hand = hand
-
-                logger.info("All hands extracted successfully")
-
-            logger.info(f"Generated {len(questions)} questions in parallel")
+            # BAML抽出はVerifier内で実行されるため、ここでは問題文のみを返す
             return questions
 
         except Exception as e:
@@ -276,18 +254,13 @@ class QuestionGenerator:
             instructions = []
             with open(csv_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
-                for row in reader:
-                    instructions.append(row['instruction'])
-
-            logger.info(f"Loaded {len(instructions)} instructions from {csv_path}")
+                instructions.extend(row['instruction'] for row in reader)
 
             # num_questionsが指定されている場合はランダムに選択
             if num_questions is not None and num_questions < len(instructions):
                 instructions = random.sample(instructions, num_questions)
-                logger.info(f"Randomly selected {num_questions} instructions from CSV")
 
             # 並列で問題文を生成
-            logger.info(f"Generating {len(instructions)} questions from instructions...")
             tasks = [self._generate_single_question(inst) for inst in instructions]
             question_texts = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -308,28 +281,6 @@ class QuestionGenerator:
 
             if failed_count > 0:
                 logger.warning(f"Failed to generate {failed_count}/{len(instructions)} questions")
-
-            # BAMLで並列抽出（生成エラーがない問題のみ）
-            valid_questions = [q for q in questions if q.generation_error is None]
-            logger.info(f"Extracting {len(valid_questions)} hands from questions with BAML in parallel...")
-
-            if valid_questions:
-                extract_tasks = [
-                    extract_hand_from_question(q.question) for q in valid_questions
-                ]
-                extracted_hands = await asyncio.gather(*extract_tasks, return_exceptions=True)
-
-                for question, hand in zip(valid_questions, extracted_hands):
-                    if isinstance(hand, Exception):
-                        logger.error(f"Failed to extract hand: {hand}")
-                        question.generation_error = f"Hand extraction failed: {str(hand)}"
-                    else:
-                        question.hand = hand
-
-                logger.info("All hands extracted successfully")
-
-            success_count = len([q for q in questions if q.generation_error is None])
-            logger.info(f"Successfully generated {success_count}/{len(questions)} questions from CSV instructions")
 
             return questions
 
