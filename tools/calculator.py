@@ -63,10 +63,9 @@ def convert_tiles_to_136_array(tiles: List[str]) -> List[int]:
         elif tile.endswith("z"):
             honors += tile[0]
 
-    result = TilesConverter.string_to_136_array(
+    return TilesConverter.string_to_136_array(
         man=man, pin=pin, sou=sou, honors=honors
     )
-    return result
 
 
 def convert_melds_to_mahjong_format(
@@ -111,11 +110,7 @@ def _detect_meld_type(tiles: List[str]) -> str:
         return Meld.KAN
     elif len(tiles) == 3:
         # 同じ牌3枚ならポン
-        if tiles[0] == tiles[1] == tiles[2]:
-            return Meld.PON
-        # 連続する3枚ならチー
-        else:
-            return Meld.CHI
+        return Meld.PON if tiles[0] == tiles[1] == tiles[2] else Meld.CHI
     else:
         # それ以外はエラー（通常はありえない）
         raise ValueError(f"Invalid meld size: {len(tiles)}")
